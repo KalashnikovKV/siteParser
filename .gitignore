@@ -1,0 +1,12 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+data/*.db
+data/*.db-wal
+data/*.db-shm
+data/browser_profile/
+data/reports/
+web/node_modules/
+web/dist/
+.python-version

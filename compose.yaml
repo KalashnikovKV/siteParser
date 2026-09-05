@@ -1,0 +1,21 @@
+# Фон: docker compose up -d --build
+# Логи: docker compose logs -f
+# Стоп: docker compose down
+services:
+  app:
+    build: .
+    image: skelbiu-pc:local
+    ports:
+      - "8765:8765"
+    environment:
+      SKELBIU_HOST: "0.0.0.0"
+      SKELBIU_PORT: "8765"
+      SKELBIU_SOURCE: skelbiu
+      SKELBIU_ADVISOR: ollama
+      OLLAMA_HOST: http://host.docker.internal:11434
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped
+    init: true
