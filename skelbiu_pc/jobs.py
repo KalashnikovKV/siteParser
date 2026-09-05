@@ -1,91 +1,71 @@
-"""Фоновые задачи: пересчёт, описания и модель могут идти параллельно."""
+"""Фоновые задачи: пересчёт, описания и модель могут идти параллельно.
+
+Статус лежит в SQLite, чтобы переживать restart контейнера.
+"""
 
 from __future__ import annotations
 
 import threading
+from pathlib import Path
 from typing import Any
 
 from skelbiu_pc import db
+from skelbiu_pc.db.jobs_store import KINDS
 from skelbiu_pc.pipeline import advise_candidates, analyze_all, fetch_missing_details
 
-KINDS = ("analyze", "details", "advise")
-
-
-def _empty() -> dict[str, Any]:
-    return {
-        "running": False,
-        "kind": None,
-        "done": 0,
-        "total": 0,
-        "analyzed": 0,
-        "error": None,
-        "stats": None,
-    }
-
-
 _lock = threading.Lock()
-_slots: dict[str, dict[str, Any]] = {kind: _empty() for kind in KINDS}
+_local_running: set[str] = set()
 
 
-def status(kind: str | None = None) -> dict[str, Any]:
+def status(kind: str | None = None, path: Path | None = None) -> dict[str, Any]:
+    if kind:
+        return db.job_status(kind, path)
+    for name in KINDS:
+        slot = db.job_status(name, path)
+        if slot["running"]:
+            return slot
+    return db.empty_job()
+
+
+def _begin(kind: str, path: Path | None) -> dict[str, Any] | None:
     with _lock:
-        if kind:
-            return dict(_slots[kind])
-        running = next((slot for slot in _slots.values() if slot["running"]), None)
-        return dict(running) if running else _empty()
-
-
-def _set(slot: str, **kwargs) -> None:
-    with _lock:
-        _slots[slot].update(kwargs)
-
-
-def _begin(kind: str) -> dict[str, Any] | None:
-    with _lock:
-        if _slots[kind]["running"]:
+        if kind in _local_running:
             return None
-        _slots[kind].update(
-            {
-                "running": True,
-                "kind": kind,
-                "done": 0,
-                "total": 0,
-                "analyzed": 0,
-                "error": None,
-            }
-        )
-        return dict(_slots[kind])
+        started = db.try_begin_job(kind, path)
+        if started is None:
+            return None
+        _local_running.add(kind)
+        return started
+
+
+def _done(kind: str) -> None:
+    with _lock:
+        _local_running.discard(kind)
 
 
 def start(path=None, only_missing: bool = True) -> dict[str, Any]:
-    if _begin("analyze") is None:
-        return status("analyze")
+    if _begin("analyze", path) is None:
+        return status("analyze", path)
 
     def worker() -> None:
         try:
             count = analyze_all(path, only_missing=only_missing)
             stats = db.stats(path)
-            _set(
-                "analyze",
-                analyzed=count,
-                done=count,
-                stats=stats,
-                error=None,
-                running=False,
-                kind=None,
-            )
+            db.finish_job("analyze", path, analyzed=count, done=count, stats=stats)
         except Exception as exc:
-            _set("analyze", error=str(exc), running=False, kind=None)
+            db.finish_job("analyze", path, error=str(exc))
+        finally:
+            _done("analyze")
 
     threading.Thread(target=worker, daemon=True).start()
-    return status("analyze")
+    return status("analyze", path)
 
 
 def start_details(path=None, limit: int | None = None, headed: bool = False) -> dict[str, Any]:
     from skelbiu_pc.config import DETAIL_TTL_DAYS
 
-    if _begin("details") is None:
-        return status("details")
+    if _begin("details", path) is None:
+        return status("details", path)
     pending = db.listings_needing_details(
         DETAIL_TTL_DAYS,
         limit=limit,
@@ -93,17 +73,17 @@ def start_details(path=None, limit: int | None = None, headed: bool = False) -> 
         missing_only=True,
         candidates_only=False,
     )
-    _set("details", total=len(pending), done=0, analyzed=0)
+    db.update_job("details", path, total=len(pending), done=0, analyzed=0)
     if not pending:
-        _set("details", running=False, kind=None, stats=db.stats(path), error=None)
-        return status("details")
+        db.finish_job("details", path, stats=db.stats(path))
+        _done("details")
+        return status("details", path)
 
     def on_progress(done: int, total: int) -> None:
-        stats = db.stats(path) if done % 15 == 0 else None
         payload: dict[str, Any] = {"done": done, "total": total, "analyzed": done}
-        if stats:
-            payload["stats"] = stats
-        _set("details", **payload)
+        if done % 15 == 0:
+            payload["stats"] = db.stats(path)
+        db.update_job("details", path, **payload)
 
     def worker() -> None:
         try:
@@ -115,22 +95,22 @@ def start_details(path=None, limit: int | None = None, headed: bool = False) -> 
                 candidates_only=False,
                 progress=on_progress,
             )
-            stats = db.stats(path)
-            _set(
+            db.finish_job(
                 "details",
+                path,
                 done=result["fetched"],
                 total=result["total"],
                 analyzed=result["fetched"],
-                stats=stats,
+                stats=db.stats(path),
                 error=result.get("error"),
-                running=False,
-                kind=None,
             )
         except Exception as exc:
-            _set("details", error=str(exc), running=False, kind=None)
+            db.finish_job("details", path, error=str(exc))
+        finally:
+            _done("details")
 
     threading.Thread(target=worker, daemon=True).start()
-    return status("details")
+    return status("details", path)
 
 
 def start_advise(
@@ -140,11 +120,11 @@ def start_advise(
     only_missing: bool = True,
     listing_id: str | None = None,
 ) -> dict[str, Any]:
-    if _begin("advise") is None:
-        return status("advise")
+    if _begin("advise", path) is None:
+        return status("advise", path)
 
     def on_progress(done: int, total: int) -> None:
-        _set("advise", done=done, total=total, analyzed=done)
+        db.update_job("advise", path, done=done, total=total, analyzed=done)
 
     def worker() -> None:
         try:
@@ -156,19 +136,19 @@ def start_advise(
                 listing_id=listing_id,
                 progress=on_progress,
             )
-            stats = db.stats(path)
-            _set(
+            db.finish_job(
                 "advise",
+                path,
                 done=result["advised"],
                 total=result["total"],
                 analyzed=result["advised"],
-                stats=stats,
+                stats=db.stats(path),
                 error=result.get("error"),
-                running=False,
-                kind=None,
             )
         except Exception as exc:
-            _set("advise", error=str(exc), running=False, kind=None)
+            db.finish_job("advise", path, error=str(exc))
+        finally:
+            _done("advise")
 
     threading.Thread(target=worker, daemon=True).start()
-    return status("advise")
+    return status("advise", path)

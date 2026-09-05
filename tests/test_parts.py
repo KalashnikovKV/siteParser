@@ -105,3 +105,12 @@ def test_compact_title_gpu_and_ryzen():
     assert parts.gpu and "4060" in parts.gpu.lower()
     assert parts.gpu_tier and parts.gpu_tier >= 5
     assert parts.ram_gb == 16
+
+
+def test_looks_like_laptop():
+    from skelbiu_pc.parts import guess_desktop, looks_like_laptop
+
+    assert looks_like_laptop("Lenovo Thinkpad X240 nesiojamas")
+    assert guess_desktop("Lenovo Thinkpad X240") == 0
+    assert guess_desktop("Stacionarus kompiuteris B550") == 1
+    assert guess_desktop("Ryzen 5 3600") is None

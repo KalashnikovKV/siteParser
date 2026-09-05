@@ -1,0 +1,466 @@
+{
+  "cpu_used": [
+    [
+      "9800x3d",
+      {
+        "name": "Ryzen 7 9800X3D",
+        "price_eur": 430,
+        "tier": 9.6,
+        "watts": 0
+      }
+    ],
+    [
+      "7800x3d",
+      {
+        "name": "Ryzen 7 7800X3D",
+        "price_eur": 310,
+        "tier": 9.2,
+        "watts": 0
+      }
+    ],
+    [
+      "5800x3d",
+      {
+        "name": "Ryzen 7 5800X3D",
+        "price_eur": 175,
+        "tier": 8.2,
+        "watts": 0
+      }
+    ],
+    [
+      "5700x3d",
+      {
+        "name": "Ryzen 7 5700X3D",
+        "price_eur": 155,
+        "tier": 7.8,
+        "watts": 0
+      }
+    ],
+    [
+      "9700x",
+      {
+        "name": "Ryzen 7 9700X",
+        "price_eur": 250,
+        "tier": 8.2,
+        "watts": 0
+      }
+    ],
+    [
+      "9600x",
+      {
+        "name": "Ryzen 5 9600X",
+        "price_eur": 175,
+        "tier": 7.4,
+        "watts": 0
+      }
+    ],
+    [
+      "7700x?",
+      {
+        "name": "Ryzen 7 7700",
+        "price_eur": 175,
+        "tier": 7.6,
+        "watts": 0
+      }
+    ],
+    [
+      "7600x",
+      {
+        "name": "Ryzen 5 7600X",
+        "price_eur": 145,
+        "tier": 6.8,
+        "watts": 0
+      }
+    ],
+    [
+      "7600",
+      {
+        "name": "Ryzen 5 7600",
+        "price_eur": 135,
+        "tier": 6.8,
+        "watts": 0
+      }
+    ],
+    [
+      "7500f",
+      {
+        "name": "Ryzen 5 7500F",
+        "price_eur": 115,
+        "tier": 6.4,
+        "watts": 0
+      }
+    ],
+    [
+      "5700x",
+      {
+        "name": "Ryzen 7 5700X",
+        "price_eur": 90,
+        "tier": 6.6,
+        "watts": 0
+      }
+    ],
+    [
+      "5600x",
+      {
+        "name": "Ryzen 5 5600X",
+        "price_eur": 75,
+        "tier": 6.2,
+        "watts": 0
+      }
+    ],
+    [
+      "5600",
+      {
+        "name": "Ryzen 5 5600",
+        "price_eur": 70,
+        "tier": 6.2,
+        "watts": 0
+      }
+    ],
+    [
+      "5500",
+      {
+        "name": "Ryzen 5 5500",
+        "price_eur": 55,
+        "tier": 5.0,
+        "watts": 0
+      }
+    ],
+    [
+      "3600x?",
+      {
+        "name": "Ryzen 5 3600",
+        "price_eur": 45,
+        "tier": 4.6,
+        "watts": 0
+      }
+    ],
+    [
+      "2600x?",
+      {
+        "name": "Ryzen 5 2600",
+        "price_eur": 35,
+        "tier": 3.4,
+        "watts": 0
+      }
+    ],
+    [
+      "i5-13400f?",
+      {
+        "name": "i5-13400F",
+        "price_eur": 120,
+        "tier": 7.4,
+        "watts": 0
+      }
+    ],
+    [
+      "i5-12400f?",
+      {
+        "name": "i5-12400F",
+        "price_eur": 85,
+        "tier": 6.6,
+        "watts": 0
+      }
+    ],
+    [
+      "i5-10400f?",
+      {
+        "name": "i5-10400F",
+        "price_eur": 45,
+        "tier": 4.4,
+        "watts": 0
+      }
+    ],
+    [
+      "i7-8700",
+      {
+        "name": "i7-8700",
+        "price_eur": 35,
+        "tier": 4.2,
+        "watts": 0
+      }
+    ],
+    [
+      "i7-7700",
+      {
+        "name": "i7-7700",
+        "price_eur": 25,
+        "tier": 3.4,
+        "watts": 0
+      }
+    ],
+    [
+      "i5-4440",
+      {
+        "name": "i5-4440",
+        "price_eur": 12,
+        "tier": 2.2,
+        "watts": 0
+      }
+    ]
+  ],
+  "gpu_used": [
+    [
+      "rtx\\s*5080",
+      {
+        "name": "RTX 5080",
+        "price_eur": 850,
+        "tier": 9.2,
+        "watts": 350
+      }
+    ],
+    [
+      "rtx\\s*5070",
+      {
+        "name": "RTX 5070",
+        "price_eur": 480,
+        "tier": 8.0,
+        "watts": 250
+      }
+    ],
+    [
+      "rtx\\s*5060\\s*ti",
+      {
+        "name": "RTX 5060 Ti",
+        "price_eur": 320,
+        "tier": 6.6,
+        "watts": 180
+      }
+    ],
+    [
+      "rtx\\s*5060",
+      {
+        "name": "RTX 5060",
+        "price_eur": 260,
+        "tier": 5.8,
+        "watts": 160
+      }
+    ],
+    [
+      "rtx\\s*4070",
+      {
+        "name": "RTX 4070",
+        "price_eur": 380,
+        "tier": 7.0,
+        "watts": 200
+      }
+    ],
+    [
+      "rtx\\s*4060\\s*ti",
+      {
+        "name": "RTX 4060 Ti",
+        "price_eur": 270,
+        "tier": 5.8,
+        "watts": 160
+      }
+    ],
+    [
+      "rtx\\s*4060",
+      {
+        "name": "RTX 4060",
+        "price_eur": 220,
+        "tier": 5.2,
+        "watts": 120
+      }
+    ],
+    [
+      "rtx\\s*3070",
+      {
+        "name": "RTX 3070",
+        "price_eur": 180,
+        "tier": 6.2,
+        "watts": 220
+      }
+    ],
+    [
+      "rtx\\s*3060\\s*ti",
+      {
+        "name": "RTX 3060 Ti",
+        "price_eur": 175,
+        "tier": 5.6,
+        "watts": 200
+      }
+    ],
+    [
+      "rtx\\s*3060",
+      {
+        "name": "RTX 3060",
+        "price_eur": 145,
+        "tier": 4.8,
+        "watts": 170
+      }
+    ],
+    [
+      "gtx\\s*1660",
+      {
+        "name": "GTX 1660 Super",
+        "price_eur": 90,
+        "tier": 3.4,
+        "watts": 125
+      }
+    ],
+    [
+      "gtx\\s*1650",
+      {
+        "name": "GTX 1650",
+        "price_eur": 70,
+        "tier": 2.4,
+        "watts": 75
+      }
+    ],
+    [
+      "gtx\\s*1050",
+      {
+        "name": "GTX 1050 Ti",
+        "price_eur": 40,
+        "tier": 1.8,
+        "watts": 75
+      }
+    ],
+    [
+      "rx\\s*9060\\s*xt",
+      {
+        "name": "RX 9060 XT",
+        "price_eur": 320,
+        "tier": 6.8,
+        "watts": 180
+      }
+    ],
+    [
+      "rx\\s*9060",
+      {
+        "name": "RX 9060",
+        "price_eur": 260,
+        "tier": 6.2,
+        "watts": 160
+      }
+    ],
+    [
+      "rx\\s*7600",
+      {
+        "name": "RX 7600",
+        "price_eur": 180,
+        "tier": 5.2,
+        "watts": 165
+      }
+    ],
+    [
+      "rx\\s*6600",
+      {
+        "name": "RX 6600",
+        "price_eur": 130,
+        "tier": 4.6,
+        "watts": 130
+      }
+    ]
+  ],
+  "ram_kit": {
+    "DDR4|16": 25,
+    "DDR4|32": 40,
+    "DDR5|16": 40,
+    "DDR5|32": 70,
+    "DDR5|64": 140,
+    "DDR3|16": 15
+  },
+  "ssd_1tb": {
+    "name": "1 TB NVMe SSD",
+    "price_eur": 50,
+    "tier": 0,
+    "watts": 0
+  },
+  "psu_650": {
+    "name": "БП 650W",
+    "price_eur": 55,
+    "tier": 0,
+    "watts": 650
+  },
+  "platform_residual": {
+    "AM5": 80,
+    "AM4": 40,
+    "LGA1851": 90,
+    "LGA1700": 50,
+    "LGA1200": 20,
+    "LGA1151": 12,
+    "LGA1150": 8,
+    "LGA1155": 6,
+    "AM3+": 6
+  },
+  "cpu_targets": {
+    "AM5": [
+      {
+        "name": "Ryzen 5 7500F",
+        "price_eur": 115,
+        "tier": 6.4,
+        "watts": 0
+      },
+      {
+        "name": "Ryzen 5 9600X",
+        "price_eur": 175,
+        "tier": 7.4,
+        "watts": 0
+      }
+    ],
+    "AM4": [
+      {
+        "name": "Ryzen 5 5600",
+        "price_eur": 70,
+        "tier": 6.2,
+        "watts": 0
+      },
+      {
+        "name": "Ryzen 7 5700X",
+        "price_eur": 90,
+        "tier": 6.6,
+        "watts": 0
+      }
+    ],
+    "LGA1700": [
+      {
+        "name": "i5-12400F",
+        "price_eur": 85,
+        "tier": 6.6,
+        "watts": 0
+      },
+      {
+        "name": "i5-13400F",
+        "price_eur": 120,
+        "tier": 7.4,
+        "watts": 0
+      }
+    ],
+    "LGA1851": [
+      {
+        "name": "Core Ultra 5 245",
+        "price_eur": 220,
+        "tier": 7.2,
+        "watts": 0
+      }
+    ]
+  },
+  "gpu_targets": {
+    "AM5": {
+      "name": "RTX 4060",
+      "price_eur": 220,
+      "tier": 5.2,
+      "watts": 120
+    },
+    "LGA1851": {
+      "name": "RTX 4060",
+      "price_eur": 220,
+      "tier": 5.2,
+      "watts": 120
+    },
+    "LGA1700": {
+      "name": "RTX 3060",
+      "price_eur": 145,
+      "tier": 4.8,
+      "watts": 170
+    },
+    "AM4": {
+      "name": "RTX 3060",
+      "price_eur": 145,
+      "tier": 4.8,
+      "watts": 170
+    }
+  }
+}

@@ -24,7 +24,7 @@ class SkelbiuSource:
         max_pages: int | None = None,
         headed: bool = False,
     ) -> Iterator[tuple[int, list[dict]]]:
-        from skelbiu_pc.scraper import ScrapeError, iter_cards
+        from skelbiu_pc.sources.skelbiu.scraper import ScrapeError, iter_cards
 
         try:
             yield from iter_cards(url or DEFAULT_LIST_URL, max_pages=max_pages, headed=headed)
@@ -32,7 +32,7 @@ class SkelbiuSource:
             raise SourceError(str(exc)) from exc
 
     def iter_details(self, urls: list[str], headed: bool = False) -> Iterator[dict]:
-        from skelbiu_pc.scraper import ScrapeError, fetch_details
+        from skelbiu_pc.sources.skelbiu.scraper import ScrapeError, fetch_details
 
         try:
             yield from fetch_details(urls, headed=headed)

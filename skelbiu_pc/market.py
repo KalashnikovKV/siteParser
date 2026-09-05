@@ -1,9 +1,15 @@
-"""Ориентиры б/у цен в € (Литва / ЕС, 2026). Это не прайс магазина, а улица."""
+"""Ориентиры б/у цен в € (Литва / ЕС, 2026). Это не прайс магазина, а улица.
+
+Таблицы — catalogs/market.json.
+"""
 
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass
+from functools import lru_cache
+from pathlib import Path
 
 from skelbiu_pc.parts import _tier_cpu, _tier_gpu
 
@@ -16,91 +22,38 @@ class CatalogItem:
     watts: int = 0
 
 
-# Сначала более длинные/конкретные модели.
-_CPU_USED: list[tuple[str, CatalogItem]] = [
-    (r"9800x3d", CatalogItem("Ryzen 7 9800X3D", 430, 9.6)),
-    (r"7800x3d", CatalogItem("Ryzen 7 7800X3D", 310, 9.2)),
-    (r"5800x3d", CatalogItem("Ryzen 7 5800X3D", 175, 8.2)),
-    (r"5700x3d", CatalogItem("Ryzen 7 5700X3D", 155, 7.8)),
-    (r"9700x", CatalogItem("Ryzen 7 9700X", 250, 8.2)),
-    (r"9600x", CatalogItem("Ryzen 5 9600X", 175, 7.4)),
-    (r"7700x?", CatalogItem("Ryzen 7 7700", 175, 7.6)),
-    (r"7600x", CatalogItem("Ryzen 5 7600X", 145, 6.8)),
-    (r"7600", CatalogItem("Ryzen 5 7600", 135, 6.8)),
-    (r"7500f", CatalogItem("Ryzen 5 7500F", 115, 6.4)),
-    (r"5700x", CatalogItem("Ryzen 7 5700X", 90, 6.6)),
-    (r"5600x", CatalogItem("Ryzen 5 5600X", 75, 6.2)),
-    (r"5600", CatalogItem("Ryzen 5 5600", 70, 6.2)),
-    (r"5500", CatalogItem("Ryzen 5 5500", 55, 5.0)),
-    (r"3600x?", CatalogItem("Ryzen 5 3600", 45, 4.6)),
-    (r"2600x?", CatalogItem("Ryzen 5 2600", 35, 3.4)),
-    (r"i5-13400f?", CatalogItem("i5-13400F", 120, 7.4)),
-    (r"i5-12400f?", CatalogItem("i5-12400F", 85, 6.6)),
-    (r"i5-10400f?", CatalogItem("i5-10400F", 45, 4.4)),
-    (r"i7-8700", CatalogItem("i7-8700", 35, 4.2)),
-    (r"i7-7700", CatalogItem("i7-7700", 25, 3.4)),
-    (r"i5-4440", CatalogItem("i5-4440", 12, 2.2)),
-]
+_CATALOG = Path(__file__).resolve().parent / "catalogs" / "market.json"
 
-_GPU_USED: list[tuple[str, CatalogItem]] = [
-    (r"rtx\s*5080", CatalogItem("RTX 5080", 850, 9.2, 350)),
-    (r"rtx\s*5070", CatalogItem("RTX 5070", 480, 8.0, 250)),
-    (r"rtx\s*5060\s*ti", CatalogItem("RTX 5060 Ti", 320, 6.6, 180)),
-    (r"rtx\s*5060", CatalogItem("RTX 5060", 260, 5.8, 160)),
-    (r"rtx\s*4070", CatalogItem("RTX 4070", 380, 7.0, 200)),
-    (r"rtx\s*4060\s*ti", CatalogItem("RTX 4060 Ti", 270, 5.8, 160)),
-    (r"rtx\s*4060", CatalogItem("RTX 4060", 220, 5.2, 120)),
-    (r"rtx\s*3070", CatalogItem("RTX 3070", 180, 6.2, 220)),
-    (r"rtx\s*3060\s*ti", CatalogItem("RTX 3060 Ti", 175, 5.6, 200)),
-    (r"rtx\s*3060", CatalogItem("RTX 3060", 145, 4.8, 170)),
-    (r"gtx\s*1660", CatalogItem("GTX 1660 Super", 90, 3.4, 125)),
-    (r"gtx\s*1650", CatalogItem("GTX 1650", 70, 2.4, 75)),
-    (r"gtx\s*1050", CatalogItem("GTX 1050 Ti", 40, 1.8, 75)),
-    (r"rx\s*9060\s*xt", CatalogItem("RX 9060 XT", 320, 6.8, 180)),
-    (r"rx\s*9060", CatalogItem("RX 9060", 260, 6.2, 160)),
-    (r"rx\s*7600", CatalogItem("RX 7600", 180, 5.2, 165)),
-    (r"rx\s*6600", CatalogItem("RX 6600", 130, 4.6, 130)),
-]
 
-RAM_KIT = {
-    ("DDR4", 16): 25,
-    ("DDR4", 32): 40,
-    ("DDR5", 16): 40,
-    ("DDR5", 32): 70,
-    ("DDR5", 64): 140,
-    ("DDR3", 16): 15,
-}
+def _item(raw: dict) -> CatalogItem:
+    return CatalogItem(raw["name"], raw["price_eur"], raw["tier"], raw.get("watts") or 0)
 
-SSD_1TB = CatalogItem("1 TB NVMe SSD", 50, 0)
-PSU_650 = CatalogItem("БП 650W", 55, 0, 650)
 
-# Сколько в готовом б/у ПК ещё «весит» плата+корпус+кулер.
-PLATFORM_RESIDUAL = {
-    "AM5": 80,
-    "AM4": 40,
-    "LGA1851": 90,
-    "LGA1700": 50,
-    "LGA1200": 20,
-    "LGA1151": 12,
-    "LGA1150": 8,
-    "LGA1155": 6,
-    "AM3+": 6,
-}
+@lru_cache(maxsize=1)
+def _raw() -> dict:
+    return json.loads(_CATALOG.read_text(encoding="utf-8"))
 
-# Разумная цель «раскрыть платформу», не топовый ореол.
-CPU_TARGETS = {
-    "AM5": [CatalogItem("Ryzen 5 7500F", 115, 6.4), CatalogItem("Ryzen 5 9600X", 175, 7.4)],
-    "AM4": [CatalogItem("Ryzen 5 5600", 70, 6.2), CatalogItem("Ryzen 7 5700X", 90, 6.6)],
-    "LGA1700": [CatalogItem("i5-12400F", 85, 6.6), CatalogItem("i5-13400F", 120, 7.4)],
-    "LGA1851": [CatalogItem("Core Ultra 5 245", 220, 7.2)],
-}
 
-GPU_TARGETS = {
-    "AM5": CatalogItem("RTX 4060", 220, 5.2, 120),
-    "LGA1851": CatalogItem("RTX 4060", 220, 5.2, 120),
-    "LGA1700": CatalogItem("RTX 3060", 145, 4.8, 170),
-    "AM4": CatalogItem("RTX 3060", 145, 4.8, 170),
-}
+def _load() -> None:
+    data = _raw()
+    globals()["_CPU_USED"] = [(pat, _item(item)) for pat, item in data["cpu_used"]]
+    globals()["_GPU_USED"] = [(pat, _item(item)) for pat, item in data["gpu_used"]]
+    ram: dict[tuple[str, int], int] = {}
+    for key, price in data["ram_kit"].items():
+        kind, gb = key.split("|", 1)
+        ram[(kind, int(gb))] = price
+    globals()["RAM_KIT"] = ram
+    globals()["SSD_1TB"] = _item(data["ssd_1tb"])
+    globals()["PSU_650"] = _item(data["psu_650"])
+    globals()["PLATFORM_RESIDUAL"] = dict(data["platform_residual"])
+    cpu_targets: dict[str, list[CatalogItem]] = {}
+    for socket, items in data["cpu_targets"].items():
+        cpu_targets[socket] = [_item(x) for x in items]
+    globals()["CPU_TARGETS"] = cpu_targets
+    globals()["GPU_TARGETS"] = {k: _item(v) for k, v in data["gpu_targets"].items()}
+
+
+_load()
 
 
 def used_cpu(name: str | None) -> CatalogItem | None:
@@ -141,7 +94,6 @@ def _fallback_cpu(name: str | None) -> CatalogItem | None:
     tier, _socket = _tier_cpu(name)
     if tier is None:
         return None
-    # Грубый б/у ценник, если модели нет в таблице.
     price = int(max(15, min(400, tier * 28)))
     return CatalogItem(name, price, tier)
 

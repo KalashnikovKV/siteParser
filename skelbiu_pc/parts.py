@@ -7,6 +7,43 @@ from dataclasses import asdict, dataclass, field
 
 from skelbiu_pc.platforms import CHIPSET_TO_SOCKET, CPU_TIERS, GPU_TIERS, socket_for_chipset
 
+def looks_like_laptop(title: str | None) -> bool:
+    return bool(_LAPTOP_RE.search(_lower(title or "")))
+
+
+def guess_desktop(title: str | None) -> int | None:
+    """1 — стационар, 0 — ноутбук, None — неясно по заголовку."""
+    low = _lower(title or "")
+    laptop = looks_like_laptop(title)
+    desktop = any(bit in low for bit in ("stacionar", "стационар", "desktop", "tower"))
+    if laptop and not desktop:
+        return 0
+    if desktop:
+        return 1
+    if laptop:
+        return 0
+    return None
+
+
+# Для SQL-отсева: те же корни, что в _LAPTOP_RE.
+LAPTOP_TITLE_BITS = (
+    "nesiojam",
+    "nešiojam",
+    "ноутбук",
+    "laptop",
+    "notebook",
+    "macbook",
+    "thinkpad",
+    "latitude",
+    "elitebook",
+    "ideapad",
+    "zenbook",
+    "vivobook",
+    "inspiron",
+    "pavilion",
+)
+
+
 _WS = re.compile(r"\s+")
 
 

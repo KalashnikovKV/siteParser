@@ -29,6 +29,9 @@ def test_search_finds_am4_and_filters_potential(tmp_path: Path):
         assert found["items"][0]["resale_eur"]
         assert found["items"][0]["upgrade_cost_eur"] is not None
 
+        gpu = client.get("/api/listings", params={"q": "1650"}).json()
+        assert gpu["total"] >= 1
+
         upgrades = client.get("/api/listings", params={"potential": True}).json()
         assert upgrades["total"] >= 1
         assert all(item["has_potential"] for item in upgrades["items"])
@@ -63,6 +66,8 @@ def test_stats_and_analyze(tmp_path: Path):
         stats = client.get("/api/stats").json()
         assert stats["total"] == 5
         assert stats["with_potential"] >= 1
+        health = client.get("/api/health").json()
+        assert health["ok"] is True
         started = client.post("/api/analyze", params={"force": True}).json()
         assert started["running"] or started["analyzed"] == 5
         done = _wait_analyze(client)

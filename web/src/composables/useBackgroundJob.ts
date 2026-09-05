@@ -27,7 +27,37 @@ export function useBackgroundJob() {
     }
   }
 
+  function watchStream(
+    kind: string,
+    current: { value: JobStatus | null },
+  ): Promise<JobStatus> {
+    return new Promise((resolve, reject) => {
+      const source = new EventSource(`/api/jobs/${kind}/stream`);
+      source.onmessage = (event) => {
+        const status = JSON.parse(event.data) as JobStatus;
+        current.value = status;
+        if (status.stats) stats.value = status.stats;
+        if (!status.running) {
+          source.close();
+          if (status.error) reject(new Error(status.error));
+          else resolve(status);
+        }
+      };
+      source.onerror = () => {
+        source.close();
+        const last = current.value;
+        if (last && !last.running) {
+          if (last.error) reject(new Error(last.error));
+          else resolve(last);
+          return;
+        }
+        reject(new Error("stream"));
+      };
+    });
+  }
+
   async function waitUntilIdle(
+    kind: string,
     poll: () => Promise<JobStatus>,
     current: { value: JobStatus | null },
     busy: { value: boolean },
@@ -35,15 +65,19 @@ export function useBackgroundJob() {
     busy.value = true;
     error.value = "";
     try {
-      while (true) {
-        const status = await poll();
-        current.value = status;
-        if (status.stats) stats.value = status.stats;
-        if (!status.running) {
-          if (status.error) throw new Error(status.error);
-          return status;
+      try {
+        await watchStream(kind, current);
+      } catch {
+        while (true) {
+          const status = await poll();
+          current.value = status;
+          if (status.stats) stats.value = status.stats;
+          if (!status.running) {
+            if (status.error) throw new Error(status.error);
+            return status;
+          }
+          await sleep(2000);
         }
-        await sleep(2000);
       }
     } catch (err) {
       error.value = err instanceof Error ? err.message : "Задача не удалась";
@@ -55,6 +89,7 @@ export function useBackgroundJob() {
   }
 
   async function run(
+    kind: string,
     start: () => Promise<JobStatus>,
     poll: () => Promise<JobStatus>,
     current: { value: JobStatus | null },
@@ -65,7 +100,7 @@ export function useBackgroundJob() {
     error.value = "";
     try {
       current.value = await start();
-      await waitUntilIdle(poll, current, busy);
+      await waitUntilIdle(kind, poll, current, busy);
       if (!current.value?.stats) await refreshStats();
     } catch (err) {
       error.value = err instanceof Error ? err.message : "Задача не удалась";
@@ -84,9 +119,9 @@ export function useBackgroundJob() {
     analyzeJob.value = analyze;
     detailsJob.value = details;
     adviseJob.value = advise.job ?? null;
-    if (analyze.running) waitUntilIdle(catalog.analyzeStatus, analyzeJob, analyzeBusy);
-    if (details.running) waitUntilIdle(catalog.detailsStatus, detailsJob, detailsBusy);
-    if (advise.job?.running) waitUntilIdle(catalog.adviseJob, adviseJob, adviseBusy);
+    if (analyze.running) waitUntilIdle("analyze", catalog.analyzeStatus, analyzeJob, analyzeBusy);
+    if (details.running) waitUntilIdle("details", catalog.detailsStatus, detailsJob, detailsBusy);
+    if (advise.job?.running) waitUntilIdle("advise", catalog.adviseJob, adviseJob, adviseBusy);
   });
 
   return {
@@ -101,8 +136,10 @@ export function useBackgroundJob() {
     error,
     dataTick,
     refreshStats,
-    analyze: () => run(() => catalog.analyze(), catalog.analyzeStatus, analyzeJob, analyzeBusy),
-    fetchDetails: () => run(() => catalog.details(), catalog.detailsStatus, detailsJob, detailsBusy),
-    advise: () => run(() => catalog.advise(), catalog.adviseJob, adviseJob, adviseBusy),
+    analyze: () =>
+      run("analyze", () => catalog.analyze(), catalog.analyzeStatus, analyzeJob, analyzeBusy),
+    fetchDetails: () =>
+      run("details", () => catalog.details(), catalog.detailsStatus, detailsJob, detailsBusy),
+    advise: () => run("advise", () => catalog.advise(), catalog.adviseJob, adviseJob, adviseBusy),
   };
 }

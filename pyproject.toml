@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "skelbiu-pc"
+version = "0.4.0"
+description = "Локальный поиск ПК на skelbiu.lt с запасом апгрейда по материнке"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "beautifulsoup4>=4.12",
+    "playwright>=1.46",
+    "fastapi>=0.115",
+    "uvicorn>=0.30",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "httpx>=0.27",
+]
+
+[project.scripts]
+skelbiu-pc = "skelbiu_pc.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["skelbiu_pc*"]
+
+[tool.setuptools.package-data]
+skelbiu_pc = ["catalogs/*.json"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]

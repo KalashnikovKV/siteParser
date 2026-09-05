@@ -5,19 +5,23 @@ RUN npm ci
 COPY web/ ./
 RUN npm run build
 
-FROM python:3.12-bookworm
+FROM python:3.12-bookworm AS runtime
 WORKDIR /app
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    SKELBIU_HOST=0.0.0.0 \
+    SKELBIU_HOST=127.0.0.1 \
     SKELBIU_PORT=8765 \
     SKELBIU_SOURCE=skelbiu
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt \
-    && playwright install --with-deps chromium
+COPY pyproject.toml README.md ./
 COPY skelbiu_pc ./skelbiu_pc
-COPY pytest.ini ./
+RUN pip install --no-cache-dir .
 COPY --from=web /web/dist ./web/dist
-EXPOSE 8765
 VOLUME /app/data
-CMD ["python", "-m", "skelbiu_pc", "serve", "--host", "0.0.0.0", "--port", "8765"]
+
+FROM runtime AS serve
+EXPOSE 8765
+CMD ["python", "-m", "skelbiu_pc", "serve"]
+
+FROM runtime AS scrape
+RUN playwright install --with-deps chromium
+CMD ["python", "-m", "skelbiu_pc", "fetch", "--skip-details"]

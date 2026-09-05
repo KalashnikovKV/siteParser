@@ -122,18 +122,19 @@ def test_advise_api_and_sort(tmp_path: Path, monkeypatch):
 
 
 def test_advise_starts_while_details_running(tmp_path, monkeypatch):
-    from skelbiu_pc import jobs
+    from skelbiu_pc import db
 
-    jobs._set("details", running=True, kind="details")
-    try:
-        with _client(tmp_path, monkeypatch) as client:
+    with _client(tmp_path, monkeypatch) as client:
+        path = tmp_path / "ui.db"
+        db.update_job("details", path, running=True)
+        try:
             started = client.post("/api/advise").json()
             assert started["kind"] == "advise" or started["running"] is True
             done = _wait_job(client)
             assert done["error"] is None
             assert done["analyzed"] >= 1
-    finally:
-        jobs._set("details", running=False, kind=None)
+        finally:
+            db.update_job("details", path, running=False)
 
 
 def test_advisor_off(monkeypatch):

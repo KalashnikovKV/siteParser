@@ -17,24 +17,23 @@ analyze / UI: поиск и логика только по локальной Б
 ```
 
 1. **Сначала загрузка всей категории.** `fetch` только качает. Поиск и апгрейд — отдельный шаг по БД.
-2. **Индекс важнее карточек.** 2000 объявлений незачем открывать каждый раз. Сначала список, потом детали точечно.
-3. **Плата задаёт потолок.** CPU/чипсет → сокет (AM5, AM4, LGA1700…). Живая платформа даёт до 40 баллов, закрытая — почти ноль.
-4. **Запас (до 35).** Насколько текущий камень слабее потолка сокета, и есть ли смысл менять GPU. Пример: 2600X на B550 → путь на 5700X3D. 9800X3D на B850 → запаса почти нет.
-5. **Расширяемость (до 15).** Мало RAM, нормальный БП, не урезанный чипсет (A520/H610 штрафуются).
-6. **Цена (до 10).** Дешёвая живая база ценнее дорогой «уже готовой» сборки. Каждая смена цены пишется в `price_history`.
-7. **Отсев.** Ноутбуки, мёртвые сокеты (LGA1155/1150, AM3+), объявления без платы и CPU.
+2. **Индекс важнее карточек.** Сначала список, потом детали точечно.
+3. **Плата задаёт потолок.** CPU/чипсет → сокет (AM5, AM4, LGA1700…). Живая платформа даёт до 40 баллов.
+4. **Запас (до 35).** Насколько текущий камень слабее потолка сокета.
+5. **Расширяемость (до 15).** Мало RAM, нормальный БП, не урезанный чипсет.
+6. **Цена (до 10).** Если в карточке одна сумма, а в тексте «Kaina: … €» другая — берём текст.
+7. **Отсев.** Ноутбуки, мёртвые сокеты, объявления без платы и CPU.
 
-Порог «есть потенциал» — сумма **≥ 40** и живая (или почти живая) платформа.
+Порог «есть потенциал» — сумма **≥ 40**.
 
-Локальная модель (Ollama, по умолчанию `qwen3.5:4b`) не считает смету заново: она читает текст лота и ставит `брать` / `смотреть` / `пропуск`. Гонняются только кандидаты с оценкой ≥ 40, не вся база. Нужна живая Ollama на `127.0.0.1:11434`. Выключить: `SKELBIU_ADVISOR=off`.
+Локальная модель (Ollama, по умолчанию `qwen3.5:4b`) ставит `брать` / `смотреть` / `пропуск`. Нужна Ollama на `127.0.0.1:11434`. Выключить: `SKELBIU_ADVISOR=off`.
 
 ## Запуск
 
 ```bash
-cd /mnt/hdd4t/1TB/ideas/scelbiu_find_PC_script
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+pip install -e ".[dev]"
 playwright install chromium
 ```
 
@@ -44,10 +43,12 @@ playwright install chromium
 python -m skelbiu_pc fetch --headed --max-pages 2 --limit-details 20
 python -m skelbiu_pc analyze
 python -m skelbiu_pc advise --limit 80
-python -m skelbiu_pc serve --seed
+python -m skelbiu_pc serve
 ```
 
-Фронт (Vue 3 + TS) в режиме разработки:
+UI: http://127.0.0.1:8765/  (после `npm run build` в `web/`)
+
+Фронт в режиме разработки:
 
 ```bash
 cd web && npm install && npm run dev
@@ -55,16 +56,24 @@ cd web && npm install && npm run dev
 
 UI: http://127.0.0.1:5173  API: http://127.0.0.1:8765
 
+По умолчанию API слушает **только localhost**. Чтобы открыть из LAN: `SKELBIU_HOST=0.0.0.0 python -m skelbiu_pc serve`.
+
 ```bash
 python -m skelbiu_pc report --min-score 40 --top 30
 python -m skelbiu_pc history 100001
+python -m pytest
 ```
 
-База: `data/skelbiu.db`. JSON отчёта: `data/reports/upgrade_candidates.json`.
+База: `data/skelbiu.db`. Каталоги железа: `skelbiu_pc/catalogs/*.json`.
 
-Тесты разбора и оценки (без сети):
+## Docker
 
 ```bash
-pip install pytest
-python -m pytest
+docker compose up -d --build
+```
+
+UI: http://127.0.0.1:8765/  Образ `serve` без Chromium. Докачка объявлений:
+
+```bash
+docker compose --profile scrape run --rm scrape
 ```

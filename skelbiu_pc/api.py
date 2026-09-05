@@ -2,22 +2,25 @@
 
 from __future__ import annotations
 
+import json
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
-from skelbiu_pc import db
+from skelbiu_pc import __version__, db
 from skelbiu_pc.advisors import advisor_status
 from skelbiu_pc.config import ADVISE_DEFAULT_LIMIT, MIN_UPGRADE_SCORE, ROOT
-from skelbiu_pc.sources import list_sources
+from skelbiu_pc.db.jobs_store import KINDS
 from skelbiu_pc.jobs import start as start_analyze
 from skelbiu_pc.jobs import start_advise, start_details
 from skelbiu_pc.jobs import status as job_status
 from skelbiu_pc.pipeline import advise_candidates
+from skelbiu_pc.sources import list_sources
 
 WEB_DIST = ROOT / "web" / "dist"
 
@@ -28,13 +31,17 @@ def create_app(db_path: Path | None = None) -> FastAPI:
         db.init_db(db_path)
         yield
 
-    app = FastAPI(title="Skelbiu PC", version="0.4.0", lifespan=lifespan)
+    app = FastAPI(title="Skelbiu PC", version=__version__, lifespan=lifespan)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["http://127.0.0.1:5173", "http://localhost:5173"],
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    @app.get("/api/health")
+    def api_health():
+        return {"ok": True}
 
     @app.get("/api/stats")
     def api_stats():
@@ -104,7 +111,7 @@ def create_app(db_path: Path | None = None) -> FastAPI:
 
     @app.get("/api/analyze")
     def api_analyze_status():
-        return job_status("analyze")
+        return job_status("analyze", db_path)
 
     @app.post("/api/details")
     def api_details(limit: int | None = Query(None, ge=1, le=20000)):
@@ -112,11 +119,11 @@ def create_app(db_path: Path | None = None) -> FastAPI:
 
     @app.get("/api/details")
     def api_details_status():
-        return job_status("details")
+        return job_status("details", db_path)
 
     @app.get("/api/advise")
     def api_advise_status():
-        return {**advisor_status(), "job": job_status("advise")}
+        return {**advisor_status(), "job": job_status("advise", db_path)}
 
     @app.post("/api/advise")
     def api_advise(
@@ -144,6 +151,25 @@ def create_app(db_path: Path | None = None) -> FastAPI:
         if result.get("error"):
             raise HTTPException(503, result["error"])
         return db.get_listing(listing_id, db_path)
+
+    @app.get("/api/jobs/{kind}/stream")
+    def api_job_stream(kind: str):
+        if kind not in KINDS:
+            raise HTTPException(404, "Нет такой задачи")
+
+        def events():
+            while True:
+                st = job_status(kind, db_path)
+                yield f"data: {json.dumps(st, ensure_ascii=False)}\n\n"
+                if not st.get("running"):
+                    break
+                time.sleep(0.4)
+
+        return StreamingResponse(
+            events(),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
 
     if WEB_DIST.exists():
         assets = WEB_DIST / "assets"

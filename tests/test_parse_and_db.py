@@ -4,25 +4,12 @@ from skelbiu_pc import db
 from skelbiu_pc.parse_html import parse_detail, parse_listing_cards, parse_price_cents
 from skelbiu_pc.report import sparkline
 
-
-SAMPLE_LIST = """
-<html><body>
-<a href="/skelbimai/galingas-zaidimu-kompiuteris-83080900.html" class="js-cfuser-link standard-list-item" data-item-id="83080900">
-  <div class="title">Ryzen 7 9850X3D</div>
-  <div class="price">2 299 €</div>
-  <div class="second-line">Kaunas, 4 ч. назад</div>
-</a>
-<a href="/skelbimai/stacionarus-i5-10400-64456529.html" class="js-cfuser-link standard-list-item" data-item-id="64456529">
-  <div class="title">i5 10th gen</div>
-  <div class="price">530 €</div>
-  <div class="second-line">Vilnius, 1 д.</div>
-</a>
-</body></html>
-"""
+FIXTURE_LIST = Path(__file__).resolve().parent.parent / "fixtures" / "skelbiu_list.html"
 
 
 def test_parse_cards():
-    cards = parse_listing_cards(SAMPLE_LIST, "https://ru.skelbiu.lt/")
+    html = FIXTURE_LIST.read_text(encoding="utf-8")
+    cards = parse_listing_cards(html, "https://ru.skelbiu.lt/")
     ids = {c["id"] for c in cards}
     assert ids == {"83080900", "64456529"}
     by_id = {c["id"]: c for c in cards}

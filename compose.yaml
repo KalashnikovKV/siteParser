@@ -1,16 +1,19 @@
-# Фон: docker compose up -d --build
+# Фон UI: docker compose up -d --build
+# Докачка: docker compose --profile scrape run --rm scrape
 # Логи: docker compose logs -f
 # Стоп: docker compose down
 #
-# network_mode: host — на Linux Ollama сидит на 127.0.0.1, из bridge-сети
-# host.docker.internal туда не попадает. Порт 8765 слушает сам процесс.
+# network_mode: host — Ollama на 127.0.0.1. По умолчанию UI только localhost.
+# Чтобы открыть из LAN: SKELBIU_HOST=0.0.0.0 docker compose up -d
 services:
   app:
-    build: .
-    image: skelbiu-pc:local
+    build:
+      context: .
+      target: serve
+    image: skelbiu-pc:serve
     network_mode: host
     environment:
-      SKELBIU_HOST: "0.0.0.0"
+      SKELBIU_HOST: "127.0.0.1"
       SKELBIU_PORT: "8765"
       SKELBIU_SOURCE: skelbiu
       SKELBIU_ADVISOR: ollama
@@ -18,4 +21,29 @@ services:
     volumes:
       - ./data:/app/data
     restart: unless-stopped
+    init: true
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8765/api/health', timeout=2)",
+        ]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
+  scrape:
+    build:
+      context: .
+      target: scrape
+    image: skelbiu-pc:scrape
+    network_mode: host
+    profiles: ["scrape"]
+    environment:
+      SKELBIU_SOURCE: skelbiu
+    volumes:
+      - ./data:/app/data
     init: true
