@@ -1,20 +1,20 @@
 # Фон: docker compose up -d --build
 # Логи: docker compose logs -f
 # Стоп: docker compose down
+#
+# network_mode: host — на Linux Ollama сидит на 127.0.0.1, из bridge-сети
+# host.docker.internal туда не попадает. Порт 8765 слушает сам процесс.
 services:
   app:
     build: .
     image: skelbiu-pc:local
-    ports:
-      - "8765:8765"
+    network_mode: host
     environment:
       SKELBIU_HOST: "0.0.0.0"
       SKELBIU_PORT: "8765"
       SKELBIU_SOURCE: skelbiu
       SKELBIU_ADVISOR: ollama
-      OLLAMA_HOST: http://host.docker.internal:11434
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+      OLLAMA_HOST: http://127.0.0.1:11434
     volumes:
       - ./data:/app/data
     restart: unless-stopped
