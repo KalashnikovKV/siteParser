@@ -73,3 +73,33 @@ def test_stats_and_analyze(tmp_path: Path):
         done = _wait_analyze(client)
         assert done["error"] is None
         assert done["analyzed"] == 5
+
+
+def test_picks_and_advice_filter(tmp_path: Path, monkeypatch):
+    monkeypatch.setenv("SKELBIU_ADVISOR", "fake")
+    with _client(tmp_path) as client:
+        client.post("/api/advise").json()
+        for _ in range(100):
+            job = client.get("/api/advise").json().get("job") or {}
+            if not job.get("running"):
+                break
+            time.sleep(0.05)
+
+        picks = client.get("/api/picks", params={"limit": 5}).json()
+        assert picks["items"]
+        assert picks["source"] in {"advice", "rules"}
+
+        advised = client.get(
+            "/api/listings", params={"advice": "any", "sort": "ai", "limit": 50}
+        ).json()
+        assert advised["total"] >= 1
+        assert all(item.get("advice") for item in advised["items"])
+
+        preset = client.get("/api/listings", params={"preset": "upgrade"}).json()
+        assert preset["total"] >= 1
+        assert all(item["has_potential"] for item in preset["items"])
+
+        filters = client.get("/api/filters").json()
+        assert "advice_counts" in filters
+        assert "presets" in filters
+        assert "picks" in filters["presets"]

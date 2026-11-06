@@ -1,16 +1,18 @@
-# Фон UI: docker compose up -d --build
-# Докачка: docker compose --profile scrape run --rm scrape
+# Фон UI (+ кнопка «докачать описания»): docker compose up -d --build
+# Разовая докачка индекса без UI: docker compose --profile scrape run --rm scrape
 # Логи: docker compose logs -f
 # Стоп: docker compose down
 #
+# app берёт target scrape: UI и Playwright в одном контейнере.
 # network_mode: host — Ollama на 127.0.0.1. По умолчанию UI только localhost.
-# Чтобы открыть из LAN: SKELBIU_HOST=0.0.0.0 docker compose up -d
+# Из LAN: SKELBIU_HOST=0.0.0.0 docker compose up -d
 services:
   app:
     build:
       context: .
-      target: serve
-    image: skelbiu-pc:serve
+      target: scrape
+    image: skelbiu-pc:full
+    command: ["python", "-m", "skelbiu_pc", "serve"]
     network_mode: host
     environment:
       SKELBIU_HOST: "127.0.0.1"
@@ -33,13 +35,13 @@ services:
       interval: 15s
       timeout: 3s
       retries: 5
-      start_period: 10s
+      start_period: 20s
 
   scrape:
     build:
       context: .
       target: scrape
-    image: skelbiu-pc:scrape
+    image: skelbiu-pc:full
     network_mode: host
     profiles: ["scrape"]
     environment:

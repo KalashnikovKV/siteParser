@@ -68,6 +68,34 @@ def _listing_row(row: sqlite3.Row, parts_json: str | None, include_analysis: boo
     return item
 
 
+PRESETS: dict[str, dict] = {
+    "picks": {
+        "advice": "buy,inspect",
+        "potential": True,
+        "sort": "ai",
+        "has_description": True,
+    },
+    "upgrade": {
+        "potential": True,
+        "sort": "score",
+        "min_score": 40,
+    },
+    "cheap": {
+        "potential": True,
+        "max_price_eur": 250,
+        "sort": "price_asc",
+    },
+    "margin": {
+        "potential": True,
+        "min_profit_eur": 40,
+        "sort": "profit",
+    },
+    "fresh": {
+        "sort": "seen",
+    },
+}
+
+
 def search_listings(
     *,
     q: str | None = None,
@@ -77,6 +105,11 @@ def search_listings(
     socket: str | None = None,
     source: str | None = None,
     potential: bool | None = None,
+    advice: str | None = None,
+    min_score: float | None = None,
+    min_profit_eur: float | None = None,
+    has_description: bool | None = None,
+    preset: str | None = None,
     kind: str = "all",
     sort: str = "score",
     page: int = 1,
@@ -84,6 +117,16 @@ def search_listings(
     active_only: bool = True,
     path: Path | None = None,
 ) -> dict:
+    if preset and preset in PRESETS:
+        bundle = PRESETS[preset]
+        potential = bundle.get("potential", potential)
+        advice = bundle.get("advice", advice)
+        min_score = bundle.get("min_score", min_score)
+        min_profit_eur = bundle.get("min_profit_eur", min_profit_eur)
+        max_price_eur = bundle.get("max_price_eur", max_price_eur)
+        has_description = bundle.get("has_description", has_description)
+        sort = bundle.get("sort", sort)
+
     where = ["1=1"]
     params: list = []
     if active_only:
@@ -118,6 +161,24 @@ def search_listings(
         where.append("a.has_potential = 1")
     elif potential is False:
         where.append("(a.has_potential = 0 OR a.has_potential IS NULL)")
+    if advice:
+        actions = [part.strip().lower() for part in advice.split(",") if part.strip()]
+        if actions == ["any"]:
+            where.append("v.listing_id IS NOT NULL")
+        elif actions:
+            placeholders = ",".join("?" * len(actions))
+            where.append(f"v.action IN ({placeholders})")
+            params.extend(actions)
+    if min_score is not None:
+        where.append("a.score >= ?")
+        params.append(min_score)
+    if min_profit_eur is not None:
+        where.append("a.profit_eur >= ?")
+        params.append(min_profit_eur)
+    if has_description is True:
+        where.append("l.description IS NOT NULL AND l.description != ''")
+    elif has_description is False:
+        where.append("(l.description IS NULL OR l.description = '')")
     if kind == "laptop":
         where.append("1 = 0")
     else:
@@ -132,7 +193,11 @@ def search_listings(
         "profit": "a.profit_eur IS NULL, a.profit_eur DESC",
         "resale": "a.resale_eur IS NULL, a.resale_eur DESC",
         "cost": "a.upgrade_cost_eur IS NULL, a.upgrade_cost_eur ASC",
-        "ai": "v.interest IS NULL, v.interest DESC, a.score DESC",
+        "ai": (
+            "CASE v.action WHEN 'buy' THEN 0 WHEN 'inspect' THEN 1 "
+            "WHEN 'skip' THEN 2 ELSE 3 END, "
+            "v.interest IS NULL, v.interest DESC, a.score DESC"
+        ),
     }.get(sort, "a.score IS NULL, a.score DESC")
 
     where_sql = " AND ".join(where)
@@ -267,7 +332,59 @@ def filter_options(path: Path | None = None) -> dict:
                 "SELECT DISTINCT ifnull(source, 'skelbiu') FROM listings ORDER BY 1"
             )
         ]
-    return {"cities": cities, "sockets": sockets, "sources": sources}
+        advice_rows = conn.execute(
+            f"""
+            SELECT v.action, count(*) AS n
+            FROM advice v
+            JOIN listings l ON l.id = v.listing_id
+            LEFT JOIN parts p ON p.listing_id = l.id
+            WHERE l.is_active = 1 AND {NOT_LAPTOP_SQL}
+            GROUP BY v.action
+            ORDER BY n DESC
+            """
+        ).fetchall()
+        advice_counts = {row["action"]: row["n"] for row in advice_rows}
+    return {
+        "cities": cities,
+        "sockets": sockets,
+        "sources": sources,
+        "advice_counts": advice_counts,
+        "presets": list(PRESETS),
+    }
+
+
+def top_picks(limit: int = 8, path: Path | None = None) -> dict:
+    """Лучшие лоты по мнению модели: сначала «брать», потом «смотреть»."""
+    advised = search_listings(
+        advice="buy,inspect",
+        potential=True,
+        has_description=True,
+        sort="ai",
+        page=1,
+        limit=limit,
+        path=path,
+    )
+    if advised["total"] > 0:
+        return {
+            "items": advised["items"],
+            "total": advised["total"],
+            "source": "advice",
+            "title": "Рекомендации модели",
+        }
+    fallback = search_listings(
+        potential=True,
+        min_score=40,
+        sort="profit",
+        page=1,
+        limit=limit,
+        path=path,
+    )
+    return {
+        "items": fallback["items"],
+        "total": fallback["total"],
+        "source": "rules",
+        "title": "Лучшие по правилам (модель ещё не смотрела)",
+    }
 
 
 def price_series(listing_id: str, path: Path | None = None) -> list[dict]:

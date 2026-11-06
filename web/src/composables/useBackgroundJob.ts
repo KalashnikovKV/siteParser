@@ -100,6 +100,15 @@ export function useBackgroundJob() {
     error.value = "";
     try {
       current.value = await start();
+      if (!current.value.running && (current.value.total ?? 0) === 0) {
+        if (kind === "details") {
+          error.value = "Нечего докачивать: нет пустых или устаревших описаний";
+        }
+        busy.value = false;
+        await refreshStats();
+        dataTick.value += 1;
+        return;
+      }
       await waitUntilIdle(kind, poll, current, busy);
       if (!current.value?.stats) await refreshStats();
     } catch (err) {
@@ -121,7 +130,14 @@ export function useBackgroundJob() {
     adviseJob.value = advise.job ?? null;
     if (analyze.running) waitUntilIdle("analyze", catalog.analyzeStatus, analyzeJob, analyzeBusy);
     if (details.running) waitUntilIdle("details", catalog.detailsStatus, detailsJob, detailsBusy);
-    if (advise.job?.running) waitUntilIdle("advise", catalog.adviseJob, adviseJob, adviseBusy);
+    if (advise.job?.running) {
+      waitUntilIdle("advise", catalog.adviseJob, adviseJob, adviseBusy);
+      return;
+    }
+    // Сами предлагаем лучшие варианты: если модель жива и мало советов — догоняем.
+    if (advise.available && (stats.value?.advised ?? 0) < 20 && !adviseBusy.value) {
+      run("advise", () => catalog.advise(), catalog.adviseJob, adviseJob, adviseBusy);
+    }
   });
 
   return {

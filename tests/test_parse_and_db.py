@@ -120,6 +120,57 @@ def test_details_queue_skips_laptops_and_low_score(tmp_path: Path):
     assert "lap" not in todo
 
 
+def test_details_queue_empty_text_and_stale_ttl(tmp_path: Path):
+    path = tmp_path / "q2.db"
+    db.init_db(path)
+    for listing_id in ("empty", "stale", "fresh_ok"):
+        db.upsert_card(
+            {
+                "id": listing_id,
+                "url": f"https://example/{listing_id}.html",
+                "title": "Stacionarus PC B550",
+                "price_cents": 12000,
+            },
+            path,
+        )
+    with db.connect(path) as conn:
+        conn.execute(
+            """
+            UPDATE listings
+            SET last_detail_at = datetime('now'), description = NULL
+            WHERE id = 'empty'
+            """
+        )
+        conn.execute(
+            """
+            UPDATE listings
+            SET last_detail_at = datetime('now', '-30 days'), description = 'senas tekstas'
+            WHERE id = 'stale'
+            """
+        )
+        conn.execute(
+            """
+            UPDATE listings
+            SET last_detail_at = datetime('now'), description = 'yra tekstas'
+            WHERE id = 'fresh_ok'
+            """
+        )
+    missing = {
+        row["id"]
+        for row in db.listings_needing_details(
+            14, path=path, missing_only=True, candidates_only=False
+        )
+    }
+    assert missing == {"empty"}
+    refresh = {
+        row["id"]
+        for row in db.listings_needing_details(
+            14, path=path, missing_only=False, candidates_only=False
+        )
+    }
+    assert refresh == {"empty", "stale"}
+
+
 def test_pace_slows_after_challenge():
     from skelbiu_pc.config import DETAIL_DELAY_FAST_SEC, DETAIL_DELAY_SAFE_SEC
     from skelbiu_pc.scraper import _Pace

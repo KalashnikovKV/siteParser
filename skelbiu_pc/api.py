@@ -69,6 +69,11 @@ def create_app(db_path: Path | None = None) -> FastAPI:
         socket: str | None = None,
         source: str | None = None,
         potential: bool | None = None,
+        advice: str | None = None,
+        min_score: float | None = None,
+        min_profit: float | None = None,
+        has_description: bool | None = None,
+        preset: str | None = None,
         kind: str = Query("desktop", pattern="^(all|desktop|laptop)$"),
         sort: str = Query(
             "score",
@@ -85,12 +90,21 @@ def create_app(db_path: Path | None = None) -> FastAPI:
             socket=socket,
             source=source,
             potential=potential,
+            advice=advice,
+            min_score=min_score,
+            min_profit_eur=min_profit,
+            has_description=has_description,
+            preset=preset,
             kind=kind,
             sort=sort,
             page=page,
             limit=limit,
             path=db_path,
         )
+
+    @app.get("/api/picks")
+    def api_picks(limit: int = Query(8, ge=1, le=30)):
+        return db.top_picks(limit=limit, path=db_path)
 
     @app.get("/api/listings/{listing_id}")
     def api_listing(listing_id: str):
@@ -114,8 +128,11 @@ def create_app(db_path: Path | None = None) -> FastAPI:
         return job_status("analyze", db_path)
 
     @app.post("/api/details")
-    def api_details(limit: int | None = Query(None, ge=1, le=20000)):
-        return start_details(db_path, limit=limit)
+    def api_details(
+        limit: int | None = Query(None, ge=1, le=20000),
+        refresh: bool = Query(True, description="Обновить пустые и устаревшие описания"),
+    ):
+        return start_details(db_path, limit=limit, refresh=refresh)
 
     @app.get("/api/details")
     def api_details_status():

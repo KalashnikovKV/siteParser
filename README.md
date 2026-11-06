@@ -72,7 +72,10 @@ python -m pytest
 docker compose up -d --build
 ```
 
-UI: http://127.0.0.1:8765/  Образ `serve` без Chromium. Докачка объявлений:
+UI: http://127.0.0.1:8765/  
+Образ с Chromium: кнопки «докачать описания» / fetch работают из UI.
+
+Только индекс без UI:
 
 ```bash
 docker compose --profile scrape run --rm scrape

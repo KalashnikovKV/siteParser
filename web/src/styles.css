@@ -83,10 +83,133 @@ select {
 }
 
 .filters {
-  display: grid;
-  grid-template-columns: 2fr repeat(6, 1fr);
-  gap: 8px;
+  display: block;
   margin-bottom: 16px;
+}
+
+.card-panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 14px;
+}
+
+.filters-primary {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr auto;
+  gap: 10px;
+  align-items: end;
+}
+
+.filters-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.field.grow {
+  min-width: 0;
+}
+
+.field.narrow {
+  min-width: 110px;
+}
+
+.full {
+  width: 100%;
+}
+
+button.sm,
+.ghost.sm {
+  padding: 4px 10px;
+  font-size: 13px;
+}
+
+.active-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  margin-top: 12px;
+}
+
+.tag {
+  background: #243528;
+  border: 1px solid #355743;
+  border-radius: 999px;
+  padding: 4px 10px;
+  color: var(--accent);
+  font-size: 13px;
+}
+
+.pick-summary {
+  margin: 0;
+  font-size: 12px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.empty {
+  padding: 24px 8px;
+  color: var(--muted);
+}
+
+.cards-mobile {
+  display: none;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.list-card {
+  text-align: left;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+}
+
+.list-card-top {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.list-card-price {
+  margin-left: auto;
+}
+
+.list-card-title {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.desktop-only {
+  display: table;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.field.wide {
+  grid-column: span 2;
+}
+
+.field span {
+  color: var(--muted);
+  font-size: 12px;
 }
 
 .filters input,
@@ -98,6 +221,12 @@ button {
   padding: 8px 10px;
 }
 
+.field input,
+.field select {
+  width: 100%;
+  background: var(--bg);
+}
+
 button {
   cursor: pointer;
 }
@@ -106,6 +235,112 @@ button.primary {
   background: #243528;
   border-color: #355743;
   color: var(--accent);
+}
+
+button.ghost {
+  background: transparent;
+  border-color: var(--line);
+  color: var(--muted);
+}
+
+.categories,
+.sort-row,
+.picks-head,
+.pick-top {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.categories {
+  margin-bottom: 12px;
+}
+
+.sort-row {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.chip {
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 6px 12px;
+  color: var(--text);
+}
+
+.chip.sm {
+  padding: 4px 10px;
+  font-size: 13px;
+}
+
+.chip.active {
+  background: #243528;
+  border-color: #355743;
+  color: var(--accent);
+}
+
+.chip-count {
+  margin-left: 4px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.picks {
+  margin-bottom: 18px;
+}
+
+.picks-head {
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.picks-head h2 {
+  margin: 0 0 4px;
+  font-size: 18px;
+}
+
+.picks-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  overflow-x: auto;
+}
+
+.pick-card {
+  text-align: left;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px;
+  min-height: 150px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.pick-card:hover {
+  border-color: #3d4a63;
+  background: #202633;
+}
+
+.pick-title {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  line-height: 1.3;
+}
+
+.pick-margin {
+  margin-top: auto;
+  font-size: 13px;
+}
+
+.result-line {
+  margin: 8px 0 12px;
 }
 
 .table {
@@ -201,13 +436,44 @@ button.primary {
   font-size: 14px;
 }
 
-@media (max-width: 900px) {
-  .filters,
-  .grid2 {
+@media (max-width: 1100px) {
+  .filters-primary {
     grid-template-columns: 1fr 1fr;
+  }
+
+  .filters-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .field.wide {
+    grid-column: span 2;
+  }
+
+  .picks-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 900px) {
+  .filters-primary,
+  .filters-grid,
+  .grid2 {
+    grid-template-columns: 1fr;
   }
 
   .top {
     flex-direction: column;
+  }
+
+  .picks-row {
+    grid-template-columns: 1fr;
+  }
+
+  .desktop-only {
+    display: none;
+  }
+
+  .cards-mobile {
+    display: flex;
   }
 }

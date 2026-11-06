@@ -261,7 +261,14 @@ def listings_needing_details(
         """
         params: list = []
         if missing_only:
-            sql += " AND l.last_detail_at IS NULL"
+            # Без last_detail_at или с пустым текстом (неудачный прошлый заход).
+            sql += """
+              AND (
+                    l.last_detail_at IS NULL
+                 OR l.description IS NULL
+                 OR l.description = ''
+              )
+            """
         else:
             sql += """
               AND (

@@ -101,6 +101,13 @@ export interface ListingPage {
   limit: number;
 }
 
+export interface PicksPage {
+  items: ListingCard[];
+  total: number;
+  source: "advice" | "rules" | string;
+  title: string;
+}
+
 export interface Stats {
   total: number;
   active: number;
@@ -121,6 +128,8 @@ export interface Filters {
   cities: string[];
   sockets: string[];
   sources: string[];
+  advice_counts?: Record<string, number>;
+  presets?: string[];
 }
 
 export interface SourceInfo {
@@ -137,6 +146,11 @@ export interface QueryState {
   socket: string;
   source: string;
   potential: string;
+  advice: string;
+  min_score: string;
+  min_profit: string;
+  has_description: string;
+  preset: string;
   kind: string;
   sort: string;
   page: number;

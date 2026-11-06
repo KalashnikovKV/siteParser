@@ -24,7 +24,7 @@ const {
     <div>
       <h1><router-link :to="{ name: 'list' }" style="color: inherit">Skelbiu PC</router-link></h1>
       <div class="muted">
-        Источники через адаптеры, поиск и смета — уже по локальной базе
+        Категории, фильтры и топ модели — уже по локальной базе
       </div>
     </div>
     <div class="stats" v-if="stats">
@@ -48,7 +48,7 @@ const {
         :title="advisor?.error || advisor?.model || ''"
         @click="advise"
       >
-        {{ adviseBusy ? `модель ${adviseJob?.done ?? 0}/${adviseJob?.total ?? "?"}` : "спросить модель" }}
+        {{ adviseBusy ? `модель ${adviseJob?.done ?? 0}/${adviseJob?.total ?? "?"}` : "обновить топ модели" }}
       </button>
     </div>
   </header>

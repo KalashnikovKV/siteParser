@@ -31,9 +31,10 @@ DETAIL_DELAY_FAST_SEC = (0.3, 0.6)
 DETAIL_DELAY_SAFE_SEC = (1.2, 2.3)
 DETAIL_DELAY_SEC = DETAIL_DELAY_SAFE_SEC
 
-# Полное описание: не вся база, а кандидаты и свежие без текста.
+# Полное описание: без текста, пустые и устаревшие по TTL; UI — пачками.
 DETAIL_TTL_DAYS = 14
 DETAIL_MIN_SCORE = float(os.environ.get("SKELBIU_DETAIL_MIN_SCORE", "30"))
+DETAIL_BATCH_LIMIT = int(os.environ.get("SKELBIU_DETAIL_LIMIT", "200"))
 NAV_TIMEOUT_MS = 45_000
 
 # Порог, выше которого объявление считается «с потенциалом апгрейда».

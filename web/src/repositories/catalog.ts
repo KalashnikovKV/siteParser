@@ -1,11 +1,10 @@
-/** Репозиторий над HTTP API. Виды не ходят в fetch напрямую. */
-
 import type {
   AdvisorStatus,
   Filters,
   JobStatus,
   ListingDetail,
   ListingPage,
+  PicksPage,
   SourceInfo,
   Stats,
 } from "../types";
@@ -37,6 +36,7 @@ export const catalog = {
   stats: () => getJson<Stats>("/api/stats"),
   filters: () => getJson<Filters>("/api/filters"),
   sources: () => getJson<{ items: SourceInfo[] }>("/api/sources"),
+  picks: (limit = 8) => getJson<PicksPage>(`/api/picks?limit=${limit}`),
   listings(params: Record<string, string | number | undefined>) {
     const query = new URLSearchParams();
     for (const [key, value] of Object.entries(params)) {

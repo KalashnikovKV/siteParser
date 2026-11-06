@@ -30,7 +30,14 @@ from skelbiu_pc.db.listings import (
     upsert_cards,
 )
 from skelbiu_pc.db.schema import init_db
-from skelbiu_pc.db.search import filter_options, get_listing, price_series, search_listings, stats
+from skelbiu_pc.db.search import (
+    filter_options,
+    get_listing,
+    price_series,
+    search_listings,
+    stats,
+    top_picks,
+)
 
 __all__ = [
     "analyzed_ids",
@@ -57,6 +64,7 @@ __all__ = [
     "search_listings",
     "start_run",
     "stats",
+    "top_picks",
     "top_upgrades",
     "try_begin_job",
     "update_detail",

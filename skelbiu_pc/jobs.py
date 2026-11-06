@@ -61,16 +61,23 @@ def start(path=None, only_missing: bool = True) -> dict[str, Any]:
     return status("analyze", path)
 
 
-def start_details(path=None, limit: int | None = None, headed: bool = False) -> dict[str, Any]:
-    from skelbiu_pc.config import DETAIL_TTL_DAYS
+def start_details(
+    path=None,
+    limit: int | None = None,
+    headed: bool = False,
+    *,
+    refresh: bool = True,
+) -> dict[str, Any]:
+    from skelbiu_pc.config import DETAIL_BATCH_LIMIT, DETAIL_TTL_DAYS
 
     if _begin("details", path) is None:
         return status("details", path)
+    batch = DETAIL_BATCH_LIMIT if limit is None else limit
     pending = db.listings_needing_details(
         DETAIL_TTL_DAYS,
-        limit=limit,
+        limit=batch,
         path=path,
-        missing_only=True,
+        missing_only=not refresh,
         candidates_only=False,
     )
     db.update_job("details", path, total=len(pending), done=0, analyzed=0)
@@ -89,9 +96,9 @@ def start_details(path=None, limit: int | None = None, headed: bool = False) -> 
         try:
             result = fetch_missing_details(
                 path=path,
-                limit=limit,
+                limit=batch,
                 headed=headed,
-                missing_only=True,
+                missing_only=not refresh,
                 candidates_only=False,
                 progress=on_progress,
             )
