@@ -175,9 +175,33 @@ def cmd_serve(host: str, port: int) -> int:
     import uvicorn
 
     from skelbiu_pc.api import create_app
+    from skelbiu_pc.security import SecuritySettings, is_loopback_host, is_wildcard_host
 
-    print(f"API: http://{host}:{port}/api/stats")
-    print(f"UI:  http://{host}:{port}/  (после npm run build в web/)")
-    print(f"Dev: npm run dev в web/  →  http://127.0.0.1:5173")
-    uvicorn.run(create_app(), host=host, port=port, reload=False)
+    settings = SecuritySettings.from_env(host)
+    if not is_loopback_host(host) and not settings.auth_enabled:
+        print(
+            f"Отказ: на {host} интерфейс виден из сети, а пароль не задан.\n"
+            "Задайте SKELBIU_PASSWORD (логин — SKELBIU_USER, по умолчанию skelbiu)\n"
+            "и SKELBIU_ALLOWED_HOSTS=<IP или имя, по которому открываете UI>.",
+            file=sys.stderr,
+        )
+        return 2
+    shown = "127.0.0.1" if is_wildcard_host(host) else host
+    if ":" in shown:
+        shown = f"[{shown}]"
+    print(f"UI:  http://{shown}:{port}/  (после npm run build в web/)")
+    print(f"API: http://{shown}:{port}/api/stats")
+    print("Dev: npm run dev в web/  →  http://127.0.0.1:5173")
+    if settings.auth_enabled:
+        print(f"Вход по паролю, логин {settings.username}")
+    if is_wildcard_host(host):
+        extra = sorted(settings.allowed_hosts)
+        print(f"Разрешённые Host: {', '.join(extra)} (ещё — через SKELBIU_ALLOWED_HOSTS)")
+    uvicorn.run(
+        create_app(security=settings),
+        host=host,
+        port=port,
+        reload=False,
+        server_header=False,
+    )
     return 0

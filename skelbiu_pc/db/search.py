@@ -8,7 +8,8 @@ from pathlib import Path
 
 from skelbiu_pc.db.connection import connect
 from skelbiu_pc.db.fts import fts_match_query
-from skelbiu_pc.db.schema import NOT_LAPTOP_SQL
+from skelbiu_pc.db.schema import NO_TEXT_SQL, NOT_LAPTOP_SQL, STALE_DETAIL_SQL
+from skelbiu_pc.urls import safe_http_url
 
 
 def _parts_brief(parts: dict | None) -> dict:
@@ -30,6 +31,7 @@ def _parts_brief(parts: dict | None) -> dict:
 
 def _listing_row(row: sqlite3.Row, parts_json: str | None, include_analysis: bool = False) -> dict:
     item = dict(row)
+    item["url"] = safe_http_url(item.get("url"))
     parts = json.loads(parts_json) if parts_json else {}
     analysis = None
     payload = item.pop("payload_json", None)
@@ -280,6 +282,8 @@ def get_listing(listing_id: str, path: Path | None = None) -> dict | None:
 
 
 def stats(path: Path | None = None) -> dict:
+    from skelbiu_pc.config import DETAIL_TTL_DAYS
+
     with connect(path) as conn:
         row = conn.execute(
             """
@@ -295,6 +299,18 @@ def stats(path: Path | None = None) -> dict:
               (SELECT count(*) FROM advice) AS advised
             """
         ).fetchone()
+        # То же множество, что «Все» в UI и очередь «Докачать описания».
+        sale = conn.execute(
+            f"""
+            SELECT count(*) AS on_sale,
+                   ifnull(sum({NO_TEXT_SQL}), 0) AS missing,
+                   ifnull(sum(NOT {NO_TEXT_SQL} AND {STALE_DETAIL_SQL}), 0) AS stale
+            FROM listings l
+            LEFT JOIN parts p ON p.listing_id = l.id
+            WHERE l.is_active = 1 AND {NOT_LAPTOP_SQL}
+            """,
+            (f"-{DETAIL_TTL_DAYS} days",),
+        ).fetchone()
         run = conn.execute(
             """
             SELECT started_at, finished_at, list_url, listings_seen, new_listings
@@ -308,6 +324,12 @@ def stats(path: Path | None = None) -> dict:
         "analyzed": row["analyzed"],
         "with_potential": row["with_potential"],
         "advised": row["advised"],
+        "on_sale": sale["on_sale"],
+        "details_missing": sale["missing"],
+        "details_stale": sale["stale"],
+        "details_fresh": sale["on_sale"] - sale["missing"] - sale["stale"],
+        "unanalyzed": max(0, row["total"] - row["analyzed"]),
+        "detail_ttl_days": DETAIL_TTL_DAYS,
         "last_run": dict(run) if run else None,
     }
 

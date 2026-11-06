@@ -12,6 +12,11 @@ NOT_LAPTOP_SQL = """
     ifnull(l.is_desktop, 1) = 1
     AND ifnull(json_extract(p.payload_json, '$.is_laptop'), 0) != 1
 """
+NO_TEXT_SQL = "ifnull(l.description, '') = ''"
+# Параметр — '-N days'. julianday, а не строки: в базе ISO с «T», а datetime('now') — через пробел.
+STALE_DETAIL_SQL = (
+    "(l.last_detail_at IS NULL OR julianday(l.last_detail_at) < julianday('now', ?))"
+)
 
 _SCHEMA = """
             CREATE TABLE IF NOT EXISTS listings (

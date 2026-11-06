@@ -171,6 +171,46 @@ def test_details_queue_empty_text_and_stale_ttl(tmp_path: Path):
     assert refresh == {"empty", "stale"}
 
 
+def test_details_queue_retries_empty_before_stale(tmp_path: Path):
+    path = tmp_path / "q3.db"
+    db.init_db(path)
+    for listing_id, score in (("stale_top", 90), ("empty_low", 10), ("fresh_ok", 50), ("never", 5)):
+        db.upsert_card(
+            {
+                "id": listing_id,
+                "url": f"https://example/{listing_id}.html",
+                "title": "Stacionarus PC B550",
+                "price_cents": 12000,
+            },
+            path,
+        )
+        db.save_analysis(listing_id, {"score": score, "verdict": "", "has_potential": False}, path)
+    iso = "strftime('%Y-%m-%dT%H:%M:%S+00:00', 'now', ?)"
+    with db.connect(path) as conn:
+        # Час до и после границы в 14 дней — в ISO-формате с «T», как пишет utcnow().
+        conn.execute(
+            f"UPDATE listings SET description = 'senas', last_detail_at = {iso} WHERE id = 'stale_top'",
+            ("-337 hours",),
+        )
+        conn.execute(
+            f"UPDATE listings SET description = 'yra', last_detail_at = {iso} WHERE id = 'fresh_ok'",
+            ("-335 hours",),
+        )
+        conn.execute(
+            f"UPDATE listings SET description = '', last_detail_at = {iso} WHERE id = 'empty_low'",
+            ("-1 hours",),
+        )
+    queue = db.listings_needing_details(14, path=path, missing_only=False, candidates_only=False)
+    assert [row["id"] for row in queue] == ["never", "empty_low", "stale_top"]
+
+    stats = db.stats(path)
+    assert stats["on_sale"] == 4
+    assert stats["details_missing"] == 2
+    assert stats["details_stale"] == 1
+    assert stats["details_fresh"] == 1
+    assert stats["unanalyzed"] == 0
+
+
 def test_pace_slows_after_challenge():
     from skelbiu_pc.config import DETAIL_DELAY_FAST_SEC, DETAIL_DELAY_SAFE_SEC
     from skelbiu_pc.scraper import _Pace

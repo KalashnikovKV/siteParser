@@ -8,6 +8,9 @@ from urllib.parse import urljoin
 
 from bs4 import BeautifulSoup
 
+from skelbiu_pc.urls import host_matches
+
+SKELBIU_DOMAIN = "skelbiu.lt"
 LISTING_HREF = re.compile(r"/skelbimai/[^\"']+-(\d+)\.html", re.I)
 PRICE_RE = re.compile(r"(\d[\d\s\u00a0]{0,12})\s*€")
 CITY_HINTS = (
@@ -36,6 +39,11 @@ CITY_HINTS = (
 )
 
 
+def is_skelbiu_url(url: str | None) -> bool:
+    """Браузер скрапера и ссылки в UI ведут только на skelbiu.lt и его поддомены."""
+    return host_matches(url, SKELBIU_DOMAIN)
+
+
 def parse_listing_cards(html: str, base_url: str) -> list[dict]:
     soup = BeautifulSoup(html, "html.parser")
     cards: dict[str, dict] = {}
@@ -53,6 +61,8 @@ def parse_listing_cards(html: str, base_url: str) -> list[dict]:
         if listing_id in cards:
             continue
         url = urljoin(base_url, href.split("?")[0])
+        if not is_skelbiu_url(url):
+            continue
         title_el = a.select_one(".title")
         price_el = a.select_one(".price")
         place_el = a.select_one(".second-line, .second-dataline")

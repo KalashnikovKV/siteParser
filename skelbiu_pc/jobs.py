@@ -87,10 +87,14 @@ def start_details(
         return status("details", path)
 
     def on_progress(done: int, total: int) -> None:
-        payload: dict[str, Any] = {"done": done, "total": total, "analyzed": done}
-        if done % 15 == 0:
-            payload["stats"] = db.stats(path)
-        db.update_job("details", path, **payload)
+        db.update_job(
+            "details",
+            path,
+            done=done,
+            total=total,
+            analyzed=done,
+            stats=db.stats(path),
+        )
 
     def worker() -> None:
         try:

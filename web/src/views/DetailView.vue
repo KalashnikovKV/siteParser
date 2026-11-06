@@ -1,16 +1,59 @@
 <script setup lang="ts">
-import { onMounted, ref, watch } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
-import { adviceClass, adviceLabel, formatEur, scoreClass } from "../lib/format";
-import { catalog } from "../repositories/catalog";
 import PriceChart from "../components/PriceChart.vue";
+import {
+  adviceClass,
+  adviceLabel,
+  flagLabel,
+  formatDateTime,
+  formatEur,
+  formatScore,
+  isWarningFlag,
+  profitTone,
+  safeExternalUrl,
+  scoreClass,
+} from "../lib/format";
+import { catalog } from "../repositories/catalog";
 import type { ListingDetail } from "../types";
 
-const { id } = defineProps<{ id: string }>();
+const props = defineProps<{ id: string; dataTick?: number }>();
 const router = useRouter();
 const item = ref<ListingDetail | null>(null);
 const error = ref("");
+const loading = ref(false);
 const advising = ref(false);
+
+const externalUrl = computed(() => safeExternalUrl(item.value?.url));
+const sourceHost = computed(() => {
+  const url = externalUrl.value;
+  return url ? new URL(url).hostname.replace(/^www\./, "") : "";
+});
+
+const scoreParts = computed(() => {
+  const a = item.value?.analysis;
+  if (!a) return [];
+  return [
+    { label: "платформа", value: a.platform_score, max: 40 },
+    { label: "запас апгрейда", value: a.headroom_score, max: 35 },
+    { label: "слоты и БП", value: a.expandability_score, max: 15 },
+    { label: "цена", value: a.value_score, max: 10 },
+  ];
+});
+
+const parts = computed(() => {
+  const p = item.value?.parts;
+  if (!p) return [];
+  return [
+    { label: "процессор", value: p.cpu },
+    { label: "материнская плата", value: p.motherboard || p.chipset },
+    { label: "сокет", value: item.value?.socket || p.socket },
+    { label: "видеокарта", value: p.gpu || "нет / не указана" },
+    { label: "память", value: p.ram },
+    { label: "накопитель", value: p.storage },
+    { label: "блок питания", value: p.psu },
+  ];
+});
 
 function toList() {
   if (window.history.state?.back != null) {
@@ -22,10 +65,15 @@ function toList() {
 
 async function load() {
   error.value = "";
+  loading.value = true;
   try {
-    item.value = await catalog.listing(id);
+    item.value = await catalog.listing(props.id);
+    document.title = `${item.value.title || "Объявление"} — Skelbiu PC`;
   } catch (err) {
+    item.value = null;
     error.value = err instanceof Error ? err.message : "Не найдено";
+  } finally {
+    loading.value = false;
   }
 }
 
@@ -33,7 +81,7 @@ async function askModel() {
   advising.value = true;
   error.value = "";
   try {
-    item.value = await catalog.adviseListing(id);
+    item.value = await catalog.adviseListing(props.id);
   } catch (err) {
     error.value = err instanceof Error ? err.message : "Модель не ответила";
   } finally {
@@ -42,137 +90,207 @@ async function askModel() {
 }
 
 onMounted(load);
-watch(() => id, load);
+watch(() => props.id, load);
+watch(
+  () => props.dataTick,
+  (next, prev) => {
+    if (prev != null && next !== prev) load();
+  },
+);
 </script>
 
 <template>
-  <p><a href="/" @click.prevent="toList">← к списку</a></p>
-  <p v-if="error" class="err">{{ error }}</p>
-  <article v-if="item">
-    <div class="card">
-      <h2 style="margin-top: 0">{{ item.title }}</h2>
-      <p>
-        <span :class="scoreClass(item.score)">
-          {{ item.score == null ? "нет оценки" : item.score.toFixed(1) }}
-        </span>
-        {{ item.verdict || "ещё не разобрано" }}
-        · {{ item.price_eur == null ? "цена ?" : formatEur(item.price_eur) }}
-        · {{ item.city }}
-      </p>
-      <p v-if="item.analysis?.price_note" class="muted">{{ item.analysis.price_note }}</p>
-      <p>
-        <a :href="item.url" target="_blank" rel="noreferrer">открыть на skelbiu.lt</a>
-        ·
-        <button :disabled="advising" @click="askModel">
-          {{ advising ? "модель думает…" : item.advice ? "переспросить модель" : "спросить модель" }}
-        </button>
-      </p>
-    </div>
+  <div class="detail">
+    <a href="/" class="back-link" @click.prevent="toList">← к списку</a>
+    <p v-if="error" class="alert alert-error" role="alert">{{ error }}</p>
+    <p v-else-if="loading && !item" class="muted" role="status">загружаю…</p>
 
-    <div class="card" v-if="item.advice">
-      <h3>Совет модели</h3>
-      <p>
-        <span :class="adviceClass(item.advice.action)">{{ adviceLabel(item.advice.action) }}</span>
-        · интерес {{ item.advice.interest.toFixed(0) }}
-        <span class="muted" v-if="item.advice.model"> · {{ item.advice.model }}</span>
-      </p>
-      <p>{{ item.advice.summary }}</p>
-      <p v-if="item.advice.keep?.length"><b>что уже хорошо</b></p>
-      <ul>
-        <li v-for="row in item.advice.keep || []" :key="'k' + row">{{ row }}</li>
-      </ul>
-      <p v-if="item.advice.risks?.length"><b>риски</b></p>
-      <ul>
-        <li v-for="row in item.advice.risks || []" :key="'r' + row">{{ row }}</li>
-      </ul>
-      <p v-if="item.advice.flags?.length" class="muted">
-        {{ item.advice.flags.join(" · ") }}
-      </p>
-    </div>
+    <article v-if="item" class="detail-grid">
+      <section class="panel hero">
+        <div class="hero-info">
+          <div class="hero-badges">
+            <span :class="scoreClass(item.score)" title="оценка правил">
+              {{ item.score == null ? "нет оценки" : item.score.toFixed(1) }}
+            </span>
+            <span v-if="item.advice" :class="adviceClass(item.advice.action)">
+              модель: {{ adviceLabel(item.advice.action) }}
+            </span>
+            <span class="muted small">{{ item.verdict || "ещё не разобрано" }}</span>
+          </div>
+          <h1 class="hero-title">{{ item.title }}</h1>
+          <div class="hero-meta">
+            <span class="hero-price num">
+              {{ item.price_eur == null ? "цена ?" : formatEur(item.price_eur) }}
+            </span>
+            <span class="muted">{{ item.city || "город не указан" }}</span>
+            <span v-if="item.condition" class="muted">{{ item.condition }}</span>
+          </div>
+          <p v-if="item.analysis?.price_note" class="warn small">{{ item.analysis.price_note }}</p>
+          <div class="hero-actions">
+            <a
+              v-if="externalUrl"
+              class="button primary"
+              :href="externalUrl"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              открыть на {{ sourceHost }} ↗
+            </a>
+            <button type="button" :disabled="advising" :aria-busy="advising" @click="askModel">
+              {{ advising ? "модель думает…" : item.advice ? "переспросить модель" : "спросить модель" }}
+            </button>
+          </div>
+          <dl class="hero-dates small">
+            <div>
+              <dt>впервые</dt>
+              <dd>{{ formatDateTime(item.first_seen_at) }}</dd>
+            </div>
+            <div>
+              <dt>последний раз</dt>
+              <dd>{{ formatDateTime(item.last_seen_at) }}</dd>
+            </div>
+            <div>
+              <dt>описание</dt>
+              <dd>{{ item.last_detail_at ? formatDateTime(item.last_detail_at) : "не скачано" }}</dd>
+            </div>
+          </dl>
+        </div>
+        <div class="hero-chart">
+          <h2 class="small muted">История цены</h2>
+          <PriceChart :points="item.price_points" />
+        </div>
+      </section>
 
-    <div class="grid2">
-      <div class="card">
-        <h3>Комплектующие</h3>
+      <section v-if="item.advice" class="panel advice" aria-labelledby="advice-title">
+        <div class="section-head">
+          <h2 id="advice-title">Совет модели</h2>
+          <span class="muted small num">
+            интерес {{ formatScore(item.advice.interest) }}
+            <template v-if="item.advice.model"> · {{ item.advice.model }}</template>
+          </span>
+        </div>
+        <div v-if="item.advice.flags?.length" class="flags">
+          <span
+            v-for="flag in item.advice.flags"
+            :key="flag"
+            class="badge"
+            :class="isWarningFlag(flag) ? 'bad' : ''"
+          >
+            {{ flagLabel(flag) }}
+          </span>
+        </div>
+        <p class="advice-summary">{{ item.advice.summary || "Модель не оставила пояснения." }}</p>
+        <div class="advice-lists">
+          <div v-if="item.advice.keep?.length">
+            <h3>что уже хорошо</h3>
+            <ul>
+              <li v-for="row in item.advice.keep" :key="'k' + row">{{ row }}</li>
+            </ul>
+          </div>
+          <div v-if="item.advice.risks?.length">
+            <h3>риски</h3>
+            <ul>
+              <li v-for="row in item.advice.risks" :key="'r' + row">{{ row }}</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel" aria-labelledby="parts-title">
+        <h2 id="parts-title">Комплектующие</h2>
         <dl class="parts">
-          <dt>процессор</dt>
-          <dd>{{ item.parts.cpu || "—" }}</dd>
-          <dt>материнская плата</dt>
-          <dd>{{ item.parts.motherboard || item.parts.chipset || "—" }}</dd>
-          <dt>сокет</dt>
-          <dd>{{ item.socket || item.parts.socket || "—" }}</dd>
-          <dt>видеокарта</dt>
-          <dd>{{ item.parts.gpu || "нет / не указана" }}</dd>
-          <dt>память</dt>
-          <dd>{{ item.parts.ram || "—" }}</dd>
-          <dt>накопитель</dt>
-          <dd>{{ item.parts.storage || "—" }}</dd>
-          <dt>БП</dt>
-          <dd>{{ item.parts.psu || "—" }}</dd>
+          <div v-for="row in parts" :key="row.label">
+            <dt>{{ row.label }}</dt>
+            <dd>{{ row.value || "—" }}</dd>
+          </div>
         </dl>
-      </div>
-      <div class="card">
-        <h3>Потенциал от платы</h3>
-        <p v-if="item.analysis">
-          платформа {{ item.analysis.platform_score }} ·
-          запас {{ item.analysis.headroom_score }} ·
-          слоты/БП {{ item.analysis.expandability_score }} ·
-          цена {{ item.analysis.value_score }}
-        </p>
-        <ul>
-          <li v-for="reason in item.analysis?.reasons || []" :key="reason">{{ reason }}</li>
+      </section>
+
+      <section class="panel" aria-labelledby="potential-title">
+        <h2 id="potential-title">Потенциал от платы</h2>
+        <div v-if="scoreParts.length" class="meters">
+          <label v-for="row in scoreParts" :key="row.label" class="meter-row">
+            <span>{{ row.label }}</span>
+            <meter
+              min="0"
+              :max="row.max"
+              :low="row.max * 0.35"
+              :high="row.max * 0.6"
+              :optimum="row.max"
+              :value="row.value"
+            ></meter>
+            <span class="num">{{ formatScore(row.value) }}<span class="muted"> / {{ row.max }}</span></span>
+          </label>
+        </div>
+        <ul v-if="item.analysis?.reasons?.length" class="reasons">
+          <li v-for="reason in item.analysis.reasons" :key="reason">{{ reason }}</li>
         </ul>
-        <p v-if="item.analysis?.upgrades?.length"><b>что можно сменить</b></p>
-        <ul>
-          <li v-for="up in item.analysis?.upgrades || []" :key="up">{{ up }}</li>
-        </ul>
-      </div>
-    </div>
+        <template v-if="item.analysis?.upgrades?.length">
+          <h3>что можно сменить</h3>
+          <ul>
+            <li v-for="up in item.analysis.upgrades" :key="up">{{ up }}</li>
+          </ul>
+        </template>
+        <p v-if="!item.analysis" class="muted">Ещё не разобрано — нажми «Пересчитать».</p>
+      </section>
 
-    <div class="card" v-if="item.analysis?.plan">
-      <h3>Смета, чтобы раскрыть потенциал</h3>
-      <p>
-        купить объявление
-        <b>{{ item.price_eur == null ? "?" : `${item.price_eur.toFixed(0)} €` }}</b>
-        · докупить
-        <b>{{ item.analysis.plan.upgrade_cost_eur }} €</b>
-        · вложить всего
-        <b>{{ item.analysis.plan.total_in_eur ?? "—" }} €</b>
-        · продать готовую
-        <b>{{ item.analysis.plan.resale_eur ?? "—" }} €</b>
-        · маржа
-        <b :class="item.analysis.plan.profit_eur != null && item.analysis.plan.profit_eur < 0 ? 'bad' : 'good'">
-          {{ item.analysis.plan.profit_eur ?? "—" }} €
-        </b>
-      </p>
-      <table class="table plan-table">
-        <thead>
-          <tr>
-            <th>действие</th>
-            <th>позиция</th>
-            <th>цена</th>
-            <th>зачем</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="row in item.analysis.plan.items" :key="row.role + row.name">
-            <td>{{ row.action === "buy" ? "купить" : "оставить" }}</td>
-            <td>{{ row.name }}</td>
-            <td>{{ row.action === "buy" ? `${row.price_eur} €` : "—" }}</td>
-            <td class="muted">{{ row.reason }}</td>
-          </tr>
-        </tbody>
-      </table>
-      <p class="muted" v-for="note in item.analysis.plan.notes" :key="note">{{ note }}</p>
-    </div>
+      <section v-if="item.analysis?.plan" class="panel wide" aria-labelledby="plan-title">
+        <h2 id="plan-title">Смета, чтобы раскрыть потенциал</h2>
+        <dl class="money">
+          <div>
+            <dt>купить</dt>
+            <dd class="num">{{ formatEur(item.price_eur) }}</dd>
+          </div>
+          <div>
+            <dt>докупить</dt>
+            <dd class="num">{{ formatEur(item.analysis.plan.upgrade_cost_eur) }}</dd>
+          </div>
+          <div>
+            <dt>вложить всего</dt>
+            <dd class="num">{{ formatEur(item.analysis.plan.total_in_eur) }}</dd>
+          </div>
+          <div>
+            <dt>продать готовую</dt>
+            <dd class="num">{{ formatEur(item.analysis.plan.resale_eur) }}</dd>
+          </div>
+          <div>
+            <dt>маржа</dt>
+            <dd class="num" :class="profitTone(item.analysis.plan.profit_eur)">
+              {{ formatEur(item.analysis.plan.profit_eur) }}
+            </dd>
+          </div>
+        </dl>
+        <div class="table-wrap">
+          <table class="table plan-table">
+            <thead>
+              <tr>
+                <th scope="col">действие</th>
+                <th scope="col">позиция</th>
+                <th scope="col" class="right">цена</th>
+                <th scope="col">зачем</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="row in item.analysis.plan.items" :key="row.role + row.name">
+                <td>
+                  <span class="badge" :class="row.action === 'buy' ? 'mid' : 'good'">
+                    {{ row.action === "buy" ? "купить" : "оставить" }}
+                  </span>
+                </td>
+                <td>{{ row.name }}</td>
+                <td class="right num">{{ row.action === "buy" ? formatEur(row.price_eur) : "—" }}</td>
+                <td class="muted">{{ row.reason }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p v-for="note in item.analysis.plan.notes" :key="note" class="muted small">{{ note }}</p>
+      </section>
 
-    <div class="card">
-      <h3>Цена</h3>
-      <PriceChart :points="item.price_points" />
-    </div>
-
-    <div class="card" v-if="item.description">
-      <h3>Текст объявления</h3>
-      <pre style="white-space: pre-wrap; font: inherit">{{ item.description }}</pre>
-    </div>
-  </article>
+      <section v-if="item.description" class="panel wide" aria-labelledby="text-title">
+        <h2 id="text-title">Текст объявления</h2>
+        <pre class="description">{{ item.description }}</pre>
+      </section>
+    </article>
+  </div>
 </template>

@@ -5,25 +5,46 @@
 #
 # app берёт target scrape: UI и Playwright в одном контейнере.
 # network_mode: host — Ollama на 127.0.0.1. По умолчанию UI только localhost.
-# Из LAN: SKELBIU_HOST=0.0.0.0 docker compose up -d
+# Из LAN нужен пароль: SKELBIU_HOST=0.0.0.0 SKELBIU_PASSWORD=… docker compose up -d
+# Процесс работает от uid 1000 (APP_UID/APP_GID при сборке), ./data должна быть его.
+
+x-hardening: &hardening
+  read_only: true
+  tmpfs:
+    - /tmp:rw,noexec,nosuid,nodev,size=256m
+  shm_size: "512m"
+  cap_drop: [ALL]
+  security_opt:
+    - no-new-privileges:true
+  pids_limit: 1024
+  init: true
+
+x-build: &build
+  context: .
+  target: scrape
+  args:
+    APP_UID: "${APP_UID:-1000}"
+    APP_GID: "${APP_GID:-1000}"
+
 services:
   app:
-    build:
-      context: .
-      target: scrape
+    <<: *hardening
+    build: *build
     image: skelbiu-pc:full
     command: ["python", "-m", "skelbiu_pc", "serve"]
     network_mode: host
     environment:
-      SKELBIU_HOST: "127.0.0.1"
+      SKELBIU_HOST: "${SKELBIU_HOST:-127.0.0.1}"
       SKELBIU_PORT: "8765"
       SKELBIU_SOURCE: skelbiu
       SKELBIU_ADVISOR: ollama
       OLLAMA_HOST: http://127.0.0.1:11434
+      SKELBIU_USER: "${SKELBIU_USER:-skelbiu}"
+      SKELBIU_PASSWORD: "${SKELBIU_PASSWORD:-}"
+      SKELBIU_ALLOWED_HOSTS: "${SKELBIU_ALLOWED_HOSTS:-}"
     volumes:
       - ./data:/app/data
     restart: unless-stopped
-    init: true
     healthcheck:
       test:
         [
@@ -38,9 +59,8 @@ services:
       start_period: 20s
 
   scrape:
-    build:
-      context: .
-      target: scrape
+    <<: *hardening
+    build: *build
     image: skelbiu-pc:full
     network_mode: host
     profiles: ["scrape"]
@@ -48,4 +68,3 @@ services:
       SKELBIU_SOURCE: skelbiu
     volumes:
       - ./data:/app/data
-    init: true

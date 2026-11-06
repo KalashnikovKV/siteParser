@@ -8,7 +8,7 @@ from pathlib import Path
 
 from skelbiu_pc.db.connection import connect, utcnow
 from skelbiu_pc.db.fts import sync_fts
-from skelbiu_pc.db.schema import NOT_LAPTOP_SQL
+from skelbiu_pc.db.schema import NO_TEXT_SQL, NOT_LAPTOP_SQL, STALE_DETAIL_SQL
 from skelbiu_pc.parts import guess_desktop, looks_like_laptop
 
 
@@ -262,22 +262,9 @@ def listings_needing_details(
         params: list = []
         if missing_only:
             # Без last_detail_at или с пустым текстом (неудачный прошлый заход).
-            sql += """
-              AND (
-                    l.last_detail_at IS NULL
-                 OR l.description IS NULL
-                 OR l.description = ''
-              )
-            """
+            sql += f" AND (l.last_detail_at IS NULL OR {NO_TEXT_SQL})"
         else:
-            sql += """
-              AND (
-                    l.last_detail_at IS NULL
-                 OR l.description IS NULL
-                 OR l.description = ''
-                 OR l.last_detail_at < datetime('now', ?)
-              )
-            """
+            sql += f" AND ({NO_TEXT_SQL} OR {STALE_DETAIL_SQL})"
             params.append(f"-{ttl_days} days")
         sql += f" AND {NOT_LAPTOP_SQL}"
         if candidates_only:
@@ -288,8 +275,11 @@ def listings_needing_details(
               )
             """
             params.append(score_floor)
-        sql += """
+        # Сначала ни разу не открытые, потом пустые после сбоя, и только потом устаревшие:
+        # иначе обновление старых текстов бесконечно оттесняет пустые.
+        sql += f"""
             ORDER BY l.last_detail_at IS NOT NULL,
+                     NOT {NO_TEXT_SQL},
                      ifnull(a.score, 0) DESC,
                      ifnull(l.is_desktop, 1) DESC
         """

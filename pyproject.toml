@@ -29,7 +29,3 @@ include = ["skelbiu_pc*"]
 
 [tool.setuptools.package-data]
 skelbiu_pc = ["catalogs/*.json"]
-
-[tool.pytest.ini_options]
-pythonpath = ["."]
-testpaths = ["tests"]

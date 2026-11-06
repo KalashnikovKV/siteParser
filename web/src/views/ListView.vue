@@ -1,11 +1,23 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
-import { useListings } from "../composables/useListings";
+import { PAGE_SIZE, useListings } from "../composables/useListings";
 import { PRESET_LABELS } from "../composables/useListQuery";
-import { adviceClass, adviceLabel, formatEur, profitTone, scoreClass } from "../lib/format";
+import {
+  adviceClass,
+  adviceLabel,
+  formatEur,
+  formatInt,
+  formatScore,
+  labelFrom,
+  profitTone,
+  scoreClass,
+} from "../lib/format";
+import type { QueryState } from "../types";
 
 defineOptions({ name: "ListView" });
+
+type TextKey = Exclude<keyof QueryState, "page">;
 
 const props = defineProps<{ dataTick?: number }>();
 const emit = defineEmits<{ changed: [] }>();
@@ -17,9 +29,11 @@ const {
   total,
   options,
   error,
+  loading,
   resetPage,
   load,
   loadPicks,
+  loadOptions,
   clearFilters,
   applyPreset,
   showAll,
@@ -34,59 +48,46 @@ const SORT_OPTS: [string, string][] = [
   ["price_desc", "дороже"],
   ["seen", "свежие"],
 ];
+const ADVICE_LABELS: Record<string, string> = {
+  buy: "брать",
+  inspect: "смотреть",
+  skip: "пропуск",
+  any: "уже смотрела",
+};
+const ADVANCED_KEYS: TextKey[] = [
+  "city",
+  "socket",
+  "source",
+  "potential",
+  "min_score",
+  "min_profit",
+  "has_description",
+];
 
 const filtersOpen = ref(false);
+const resultsTop = ref<HTMLElement | null>(null);
 
 const hasActiveFilters = computed(() =>
   Boolean(
     query.q ||
       query.min_price ||
       query.max_price ||
-      query.city ||
-      query.socket ||
-      query.source ||
-      query.potential ||
       query.advice ||
-      query.min_score ||
-      query.min_profit ||
-      query.has_description ||
-      query.preset,
+      query.preset ||
+      ADVANCED_KEYS.some((key) => query[key]),
   ),
 );
-
-const advancedCount = computed(() =>
-  [
-    query.min_price,
-    query.max_price,
-    query.city,
-    query.socket,
-    query.source,
-    query.potential,
-    query.min_score,
-    query.min_profit,
-    query.has_description,
-  ].filter(Boolean).length,
-);
-
+const advancedCount = computed(() => ADVANCED_KEYS.filter((key) => query[key]).length);
 const adviceCounts = computed(() => options.value.advice_counts || {});
+const presetLabel = computed(() => labelFrom(PRESET_LABELS, query.preset));
+const pageCount = computed(() => Math.max(1, Math.ceil(total.value / PAGE_SIZE)));
 
 const activeTags = computed(() => {
-  const tags: { key: string; label: string }[] = [];
-  if (query.preset) {
-    tags.push({
-      key: "preset",
-      label: PRESET_LABELS[query.preset] || query.preset,
-    });
-  }
+  const tags: { key: TextKey; label: string }[] = [];
+  if (query.preset) tags.push({ key: "preset", label: presetLabel.value });
   if (query.q) tags.push({ key: "q", label: `«${query.q}»` });
   if (query.advice && !query.preset) {
-    const labels: Record<string, string> = {
-      buy: "брать",
-      inspect: "смотреть",
-      skip: "пропуск",
-      any: "уже смотрела",
-    };
-    tags.push({ key: "advice", label: labels[query.advice] || query.advice });
+    tags.push({ key: "advice", label: `модель: ${labelFrom(ADVICE_LABELS, query.advice)}` });
   }
   if (query.city) tags.push({ key: "city", label: query.city });
   if (query.socket) tags.push({ key: "socket", label: query.socket });
@@ -100,11 +101,16 @@ const activeTags = computed(() => {
   if (query.has_description === "false") {
     tags.push({ key: "has_description", label: "только заголовок" });
   }
+  if (query.source) tags.push({ key: "source", label: query.source });
   return tags;
 });
 
+function detailRoute(id: string) {
+  return { name: "detail", params: { id } };
+}
+
 function openListing(id: string) {
-  router.push({ name: "detail", params: { id } });
+  router.push(detailRoute(id));
 }
 
 function setSort(sort: string) {
@@ -113,26 +119,8 @@ function setSort(sort: string) {
   if (query.preset) query.preset = "";
 }
 
-function onManualFilter() {
-  resetPage();
-}
-
-function removeTag(key: string) {
-  if (key === "preset") {
-    query.preset = "";
-    query.page = 1;
-    return;
-  }
-  if (key === "q") query.q = "";
-  else if (key === "advice") query.advice = "";
-  else if (key === "city") query.city = "";
-  else if (key === "socket") query.socket = "";
-  else if (key === "min_price") query.min_price = "";
-  else if (key === "max_price") query.max_price = "";
-  else if (key === "potential") query.potential = "";
-  else if (key === "min_score") query.min_score = "";
-  else if (key === "min_profit") query.min_profit = "";
-  else if (key === "has_description") query.has_description = "";
+function removeTag(key: TextKey) {
+  query[key] = "";
   query.page = 1;
 }
 
@@ -143,6 +131,11 @@ function toggleAdvice(action: string) {
   query.page = 1;
 }
 
+function goToPage(page: number) {
+  query.page = Math.min(Math.max(1, page), pageCount.value);
+  resultsTop.value?.scrollIntoView({ block: "start" });
+}
+
 onMounted(() => emit("changed"));
 watch(
   () => props.dataTick,
@@ -150,64 +143,60 @@ watch(
     if (prev != null && next !== prev) {
       load();
       loadPicks();
+      loadOptions();
     }
   },
 );
 </script>
 
 <template>
-  <section v-if="picks?.items?.length" class="picks">
-    <div class="picks-head">
+  <section v-if="picks?.items?.length" class="picks" aria-labelledby="picks-title">
+    <div class="section-head">
       <div>
-        <h2>{{ picks.title }}</h2>
+        <h2 id="picks-title">{{ picks.title }}</h2>
         <p class="muted">
           {{
             picks.source === "advice"
-              ? "Сразу лучшие по мнению модели: сначала «брать», потом «смотреть»"
+              ? "Лучшие по мнению модели: сначала «брать», потом «смотреть»"
               : "Модель ещё молчит — показываю топ по марже и запасу апгрейда"
           }}
         </p>
       </div>
-      <button class="ghost" type="button" @click="applyPreset('picks')">весь топ модели</button>
+      <button class="ghost" type="button" @click="applyPreset('picks')">весь топ модели →</button>
     </div>
     <div class="picks-row">
-      <button
+      <router-link
         v-for="item in picks.items"
         :key="'pick-' + item.id"
         class="pick-card"
-        type="button"
-        @click="openListing(item.id)"
+        :to="detailRoute(item.id)"
       >
         <div class="pick-top">
           <span v-if="item.advice" :class="adviceClass(item.advice.action)">
             {{ adviceLabel(item.advice.action) }}
           </span>
-          <span :class="scoreClass(item.score)">
-            {{ item.score == null ? "—" : item.score.toFixed(0) }}
-          </span>
+          <span :class="scoreClass(item.score)" title="оценка правил">{{ formatScore(item.score) }}</span>
+          <span class="pick-price num">{{ formatEur(item.price_eur) }}</span>
         </div>
         <strong class="pick-title">{{ item.title }}</strong>
-        <div class="muted">
-          {{ formatEur(item.price_eur) }}
-          · {{ item.socket || item.parts.chipset || "сокет ?" }}
+        <div class="muted small">
+          {{ item.socket || item.parts.chipset || "сокет ?" }} · {{ item.parts.cpu || "CPU ?" }}
         </div>
-        <div class="muted">
-          {{ item.parts.cpu || "CPU ?" }}
-          <span v-if="item.advice"> · интерес {{ item.advice.interest.toFixed(0) }}</span>
+        <p v-if="item.advice?.summary" class="pick-summary">{{ item.advice.summary }}</p>
+        <div class="pick-foot small">
+          <span :class="profitTone(item.profit_eur)" class="num">маржа {{ formatEur(item.profit_eur) }}</span>
+          <span v-if="item.advice" class="muted num">интерес {{ formatScore(item.advice.interest) }}</span>
         </div>
-        <p v-if="item.advice?.summary" class="pick-summary muted">{{ item.advice.summary }}</p>
-        <div :class="profitTone(item.profit_eur)" class="pick-margin">
-          маржа {{ formatEur(item.profit_eur) }}
-        </div>
-      </button>
+      </router-link>
     </div>
   </section>
 
-  <section class="categories">
+  <nav class="categories" aria-label="Категории">
     <button
       type="button"
       class="chip"
       :class="{ active: !query.preset && !query.advice }"
+      :aria-pressed="!query.preset && !query.advice"
       @click="showAll"
     >
       Все
@@ -218,75 +207,92 @@ watch(
       type="button"
       class="chip"
       :class="{ active: query.preset === name }"
+      :aria-pressed="query.preset === name"
       @click="applyPreset(name)"
     >
-      {{ PRESET_LABELS[name] || name }}
+      {{ PRESET_LABELS[name] }}
     </button>
+    <span class="chip-sep" aria-hidden="true"></span>
     <button
+      v-for="action in ['buy', 'inspect']"
+      :key="action"
       type="button"
       class="chip"
-      :class="{ active: query.advice === 'buy' && !query.preset }"
-      @click="toggleAdvice('buy')"
+      :class="{ active: query.advice === action && !query.preset }"
+      :aria-pressed="query.advice === action && !query.preset"
+      @click="toggleAdvice(action)"
     >
-      брать
-      <span v-if="adviceCounts.buy" class="chip-count">{{ adviceCounts.buy }}</span>
+      модель: {{ ADVICE_LABELS[action] }}
+      <span v-if="adviceCounts[action]" class="chip-count">{{ formatInt(adviceCounts[action]) }}</span>
     </button>
-    <button
-      type="button"
-      class="chip"
-      :class="{ active: query.advice === 'inspect' && !query.preset }"
-      @click="toggleAdvice('inspect')"
-    >
-      смотреть
-      <span v-if="adviceCounts.inspect" class="chip-count">{{ adviceCounts.inspect }}</span>
-    </button>
-  </section>
+  </nav>
 
-  <section class="filters card-panel">
+  <section class="filters panel" aria-label="Фильтры">
     <div class="filters-primary">
-      <label class="field grow">
+      <label class="field">
         <span>поиск</span>
         <input
           v-model.trim="query.q"
+          type="search"
+          maxlength="200"
           placeholder="CPU, плата, RTX, город…"
-          @input="onManualFilter"
+          @input="resetPage"
         />
       </label>
-      <label class="field narrow">
-        <span>цена от</span>
-        <input v-model="query.min_price" type="number" placeholder="€" @input="onManualFilter" />
+      <label class="field">
+        <span>цена от, €</span>
+        <input
+          v-model="query.min_price"
+          type="number"
+          min="0"
+          step="10"
+          inputmode="numeric"
+          placeholder="0"
+          @input="resetPage"
+        />
       </label>
-      <label class="field narrow">
-        <span>цена до</span>
-        <input v-model="query.max_price" type="number" placeholder="€" @input="onManualFilter" />
+      <label class="field">
+        <span>цена до, €</span>
+        <input
+          v-model="query.max_price"
+          type="number"
+          min="0"
+          step="10"
+          inputmode="numeric"
+          placeholder="∞"
+          @input="resetPage"
+        />
       </label>
-      <div class="field narrow">
-        <span>&nbsp;</span>
-        <button type="button" class="ghost full" @click="filtersOpen = !filtersOpen">
-          {{ filtersOpen ? "скрыть фильтры" : "ещё фильтры" }}
-          <span v-if="advancedCount && !filtersOpen" class="chip-count">{{ advancedCount }}</span>
-        </button>
-      </div>
+      <button
+        type="button"
+        class="ghost filters-toggle"
+        :aria-expanded="filtersOpen"
+        aria-controls="more-filters"
+        @click="filtersOpen = !filtersOpen"
+      >
+        {{ filtersOpen ? "скрыть фильтры" : "ещё фильтры" }}
+        <span v-if="advancedCount && !filtersOpen" class="chip-count">{{ advancedCount }}</span>
+      </button>
     </div>
 
-    <div v-if="filtersOpen" class="filters-grid">
+    <div v-if="filtersOpen" id="more-filters" class="filters-grid">
       <label class="field">
         <span>город</span>
-        <select v-model="query.city" @change="onManualFilter">
+        <select v-model="query.city" @change="resetPage">
           <option value="">все</option>
           <option v-for="city in options.cities" :key="city" :value="city">{{ city }}</option>
         </select>
       </label>
       <label class="field">
         <span>сокет</span>
-        <select v-model="query.socket" @change="onManualFilter">
+        <select v-model="query.socket" @change="resetPage">
           <option value="">все</option>
           <option v-for="socket in options.sockets" :key="socket" :value="socket">{{ socket }}</option>
         </select>
       </label>
       <label class="field">
-        <span>запас</span>
-        <select v-model="query.potential" @change="onManualFilter">
+        <span>запас под апгрейд</span>
+        <select v-model="query.potential" @change="resetPage">
           <option value="">любой</option>
           <option value="true">есть апгрейд</option>
           <option value="false">без запаса</option>
@@ -294,7 +300,7 @@ watch(
       </label>
       <label class="field">
         <span>совет модели</span>
-        <select v-model="query.advice" @change="onManualFilter">
+        <select v-model="query.advice" @change="resetPage">
           <option value="">все</option>
           <option value="buy">брать</option>
           <option value="inspect">смотреть</option>
@@ -304,15 +310,30 @@ watch(
       </label>
       <label class="field">
         <span>оценка от</span>
-        <input v-model="query.min_score" type="number" placeholder="40" @input="onManualFilter" />
+        <input
+          v-model="query.min_score"
+          type="number"
+          min="0"
+          max="100"
+          inputmode="numeric"
+          placeholder="40"
+          @input="resetPage"
+        />
       </label>
       <label class="field">
-        <span>маржа от</span>
-        <input v-model="query.min_profit" type="number" placeholder="€" @input="onManualFilter" />
+        <span>маржа от, €</span>
+        <input
+          v-model="query.min_profit"
+          type="number"
+          step="10"
+          inputmode="numeric"
+          placeholder="0"
+          @input="resetPage"
+        />
       </label>
       <label class="field">
         <span>описание</span>
-        <select v-model="query.has_description" @change="onManualFilter">
+        <select v-model="query.has_description" @change="resetPage">
           <option value="">любое</option>
           <option value="true">есть текст</option>
           <option value="false">только заголовок</option>
@@ -320,7 +341,7 @@ watch(
       </label>
       <label v-if="options.sources.length > 1" class="field">
         <span>источник</span>
-        <select v-model="query.source" @change="onManualFilter">
+        <select v-model="query.source" @change="resetPage">
           <option value="">все</option>
           <option v-for="src in options.sources" :key="src" :value="src">{{ src }}</option>
         </select>
@@ -330,26 +351,28 @@ watch(
     <div v-if="activeTags.length" class="active-tags">
       <button
         v-for="tag in activeTags"
-        :key="tag.key + tag.label"
+        :key="tag.key"
         type="button"
         class="tag"
+        :aria-label="`убрать фильтр ${tag.label}`"
         @click="removeTag(tag.key)"
       >
-        {{ tag.label }} ×
+        {{ tag.label }} <span aria-hidden="true">×</span>
       </button>
       <button v-if="hasActiveFilters" type="button" class="ghost sm" @click="clearFilters">
         сбросить всё
       </button>
     </div>
 
-    <div class="sort-row">
-      <span class="muted">сортировка</span>
+    <div class="sort-row" role="group" aria-label="Сортировка">
+      <span class="muted small">сортировка</span>
       <button
         v-for="opt in SORT_OPTS"
         :key="opt[0]"
         type="button"
         class="chip sm"
         :class="{ active: query.sort === opt[0] && !query.preset }"
+        :aria-pressed="query.sort === opt[0] && !query.preset"
         @click="setSort(opt[0])"
       >
         {{ opt[1] }}
@@ -357,108 +380,121 @@ watch(
     </div>
   </section>
 
-  <p v-if="error" class="err">{{ error }}</p>
-  <p class="muted result-line">
-    Найдено {{ total }}
-    <span v-if="query.preset"> · категория «{{ PRESET_LABELS[query.preset] || query.preset }}»</span>
-  </p>
-
-  <p v-if="!items.length && !error" class="empty">
-    Ничего не нашлось. Сбрось фильтры или выбери другую категорию.
-  </p>
-
-  <div class="cards-mobile">
-    <button
-      v-for="item in items"
-      :key="'m-' + item.id"
-      type="button"
-      class="list-card"
-      @click="openListing(item.id)"
-    >
-      <div class="list-card-top">
-        <span :class="scoreClass(item.score)">
-          {{ item.score == null ? "—" : item.score.toFixed(0) }}
-        </span>
-        <span v-if="item.advice" :class="adviceClass(item.advice.action)">
-          {{ adviceLabel(item.advice.action) }}
-        </span>
-        <strong class="list-card-price">{{ formatEur(item.price_eur) }}</strong>
-      </div>
-      <strong class="list-card-title">{{ item.title }}</strong>
-      <div class="muted">
-        {{ item.city || "город ?" }} · {{ item.socket || item.parts.chipset || "сокет ?" }}
-      </div>
-      <div class="muted">
-        {{ item.parts.cpu || "CPU ?" }} · {{ item.parts.gpu || "без GPU" }}
-      </div>
-      <div :class="profitTone(item.profit_eur)">маржа {{ formatEur(item.profit_eur) }}</div>
-    </button>
+  <div ref="resultsTop" class="result-line">
+    <span>
+      Найдено <b class="num">{{ formatInt(total) }}</b>
+      <span v-if="query.preset" class="muted">
+        · категория «{{ presetLabel }}»
+      </span>
+    </span>
+    <span v-if="loading" class="loading" role="status">обновляю…</span>
   </div>
 
-  <table class="table desktop-only">
-    <thead>
-      <tr>
-        <th>оценка</th>
-        <th>модель</th>
-        <th>объявление</th>
-        <th>цена</th>
-        <th>сокет</th>
-        <th>комплектующие</th>
-        <th>докинуть</th>
-        <th>продажа</th>
-        <th>маржа</th>
-      </tr>
-    </thead>
-    <tbody>
-      <tr
+  <p v-if="error" class="alert alert-error" role="alert">{{ error }}</p>
+
+  <div class="results" :class="{ stale: loading }" :aria-busy="loading">
+    <div v-if="!items.length && !error && !loading" class="empty">
+      <p>Ничего не нашлось.</p>
+      <button v-if="hasActiveFilters" type="button" class="ghost" @click="clearFilters">
+        сбросить фильтры
+      </button>
+    </div>
+
+    <div class="cards-mobile">
+      <router-link
         v-for="item in items"
-        :key="item.id"
-        class="clickable"
-        @click="openListing(item.id)"
+        :key="'m-' + item.id"
+        class="list-card"
+        :to="detailRoute(item.id)"
       >
-        <td>
-          <span :class="scoreClass(item.score)">
-            {{ item.score == null ? "—" : item.score.toFixed(0) }}
-          </span>
-          <div class="muted">{{ item.verdict || "ещё не разобрано" }}</div>
-        </td>
-        <td>
+        <div class="list-card-top">
+          <span :class="scoreClass(item.score)">{{ formatScore(item.score) }}</span>
           <span v-if="item.advice" :class="adviceClass(item.advice.action)">
             {{ adviceLabel(item.advice.action) }}
           </span>
-          <span v-else class="muted">—</span>
-          <div class="muted" v-if="item.advice">{{ item.advice.interest.toFixed(0) }}</div>
-        </td>
-        <td>
-          <strong>{{ item.title }}</strong>
-          <div class="muted">
-            {{ item.city || "город ?" }}
-            · {{ item.has_description ? "есть текст" : "только заголовок" }}
-            <span v-if="item.source && item.source !== 'skelbiu'"> · {{ item.source }}</span>
-          </div>
-        </td>
-        <td>
-          {{ formatEur(item.price_eur) }}
-          <div class="muted" v-if="item.analysis?.price_note">текст ≠ карточка</div>
-        </td>
-        <td>
-          {{ item.socket || item.parts.chipset || "—" }}
-          <div class="muted">{{ item.parts.motherboard || item.parts.chipset || "" }}</div>
-        </td>
-        <td>
-          <div>{{ item.parts.cpu || "CPU ?" }}</div>
-          <div class="muted">{{ item.parts.gpu || "без GPU" }} · {{ item.parts.ram || "RAM ?" }}</div>
-        </td>
-        <td>{{ formatEur(item.upgrade_cost_eur) }}</td>
-        <td>{{ formatEur(item.resale_eur) }}</td>
-        <td :class="profitTone(item.profit_eur)">{{ formatEur(item.profit_eur) }}</td>
-      </tr>
-    </tbody>
-  </table>
+          <strong class="list-card-price num">{{ formatEur(item.price_eur) }}</strong>
+        </div>
+        <strong class="list-card-title">{{ item.title }}</strong>
+        <div class="muted small">
+          {{ item.city || "город ?" }} · {{ item.socket || item.parts.chipset || "сокет ?" }}
+        </div>
+        <div class="muted small">
+          {{ item.parts.cpu || "CPU ?" }} · {{ item.parts.gpu || "без GPU" }}
+        </div>
+        <div :class="profitTone(item.profit_eur)" class="small num">
+          маржа {{ formatEur(item.profit_eur) }}
+        </div>
+      </router-link>
+    </div>
 
-  <div class="pager">
-    <button :disabled="query.page <= 1" @click="query.page -= 1">назад</button>
-    <span class="muted">стр. {{ query.page }}</span>
-    <button :disabled="query.page * 30 >= total" @click="query.page += 1">дальше</button>
+    <div class="table-wrap desktop-only">
+      <table v-if="items.length" class="table">
+        <thead>
+          <tr>
+            <th scope="col">оценка</th>
+            <th scope="col">модель</th>
+            <th scope="col">объявление</th>
+            <th scope="col" class="right">цена</th>
+            <th scope="col">сокет</th>
+            <th scope="col">комплектующие</th>
+            <th scope="col" class="right">докинуть</th>
+            <th scope="col" class="right">продажа</th>
+            <th scope="col" class="right">маржа</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="item in items" :key="item.id" class="clickable" @click="openListing(item.id)">
+            <td>
+              <span :class="scoreClass(item.score)">{{ formatScore(item.score) }}</span>
+              <div class="muted small">{{ item.verdict || "не разобрано" }}</div>
+            </td>
+            <td>
+              <template v-if="item.advice">
+                <span :class="adviceClass(item.advice.action)">{{ adviceLabel(item.advice.action) }}</span>
+                <div class="muted small num">интерес {{ formatScore(item.advice.interest) }}</div>
+              </template>
+              <span v-else class="muted">—</span>
+            </td>
+            <td class="title-cell">
+              <router-link :to="detailRoute(item.id)" class="row-link" @click.stop>
+                {{ item.title }}
+              </router-link>
+              <div class="muted small">
+                {{ item.city || "город ?" }}
+                · {{ item.has_description ? "есть текст" : "только заголовок" }}
+                <span v-if="item.source && item.source !== 'skelbiu'"> · {{ item.source }}</span>
+              </div>
+            </td>
+            <td class="right num">
+              {{ formatEur(item.price_eur) }}
+              <div v-if="item.analysis?.price_note" class="warn small">текст ≠ карточка</div>
+            </td>
+            <td>
+              {{ item.socket || item.parts.chipset || "—" }}
+              <div class="muted small">{{ item.parts.motherboard || item.parts.chipset || "" }}</div>
+            </td>
+            <td>
+              <div>{{ item.parts.cpu || "CPU ?" }}</div>
+              <div class="muted small">
+                {{ item.parts.gpu || "без GPU" }} · {{ item.parts.ram || "RAM ?" }}
+              </div>
+            </td>
+            <td class="right num">{{ formatEur(item.upgrade_cost_eur) }}</td>
+            <td class="right num">{{ formatEur(item.resale_eur) }}</td>
+            <td class="right num" :class="profitTone(item.profit_eur)">
+              {{ formatEur(item.profit_eur) }}
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
   </div>
+
+  <nav v-if="total > PAGE_SIZE" class="pager" aria-label="Страницы">
+    <button type="button" :disabled="query.page <= 1" @click="goToPage(query.page - 1)">← назад</button>
+    <span class="muted num">стр. {{ query.page }} из {{ pageCount }}</span>
+    <button type="button" :disabled="query.page >= pageCount" @click="goToPage(query.page + 1)">
+      дальше →
+    </button>
+  </nav>
 </template>

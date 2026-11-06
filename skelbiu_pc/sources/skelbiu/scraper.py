@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import random
+import sys
 import time
 from collections.abc import Iterator
 
@@ -14,7 +15,14 @@ from skelbiu_pc.config import (
     PAGE_DELAY_SEC,
     USER_AGENT,
 )
-from skelbiu_pc.sources.skelbiu.parse_html import parse_detail, parse_listing_cards, page_url
+from skelbiu_pc.sources.skelbiu.parse_html import (
+    is_skelbiu_url,
+    page_url,
+    parse_detail,
+    parse_listing_cards,
+)
+
+MAX_DETAIL_FAILURES_IN_ROW = 5
 
 _BLOCKED_TYPES = {"image", "media", "font"}
 _BLOCKED_HOST_BITS = (
@@ -61,6 +69,8 @@ def iter_cards(
     """Всегда начинаем с индексных страниц: это источник новых цен и URL."""
     from playwright.sync_api import sync_playwright
 
+    if not is_skelbiu_url(list_url):
+        raise ScrapeError(f"Это не адрес skelbiu.lt: {list_url!r}")
     BROWSER_PROFILE.mkdir(parents=True, exist_ok=True)
     with sync_playwright() as pw:
         context = pw.chromium.launch_persistent_context(
@@ -117,9 +127,25 @@ def fetch_details(
         _block_heavy(context)
         page = context.pages[0] if context.pages else context.new_page()
         page.set_default_timeout(NAV_TIMEOUT_MS)
+        failures = 0
         try:
             for url in urls:
-                html, challenged = _open_detail(page, url)
+                if not is_skelbiu_url(url):
+                    print(f"  пропуск: не skelbiu.lt — {url!r}", file=sys.stderr)
+                    continue
+                try:
+                    html, challenged = _open_detail(page, url)
+                except Exception as exc:  # таймаут или обрыв одной карточки — не повод бросать пачку
+                    failures += 1
+                    reason = (str(exc).splitlines() or [type(exc).__name__])[0]
+                    print(f"  не открылась {url}: {reason}", file=sys.stderr)
+                    if failures >= MAX_DETAIL_FAILURES_IN_ROW:
+                        raise ScrapeError(
+                            f"{failures} карточек подряд не открылись — сайт недоступен?"
+                        ) from exc
+                    _sleep(DETAIL_DELAY_SAFE_SEC)
+                    continue
+                failures = 0
                 pace.note(challenged)
                 detail = parse_detail(html, url)
                 if detail.get("id"):

@@ -183,6 +183,7 @@ def advise_candidates(
     progress: ProgressCb | None = None,
 ) -> dict:
     from skelbiu_pc.advisors import get_advisor
+    from skelbiu_pc.advisors.guard import harden_advice
 
     try:
         advisor = get_advisor()
@@ -233,6 +234,8 @@ def advise_candidates(
                 flags=["parse_error"],
                 model=getattr(advisor, "model", ""),
             )
+        seller_text = f"{row.get('title') or ''}\n{row.get('description') or ''}"
+        advice = harden_advice(advice, seller_text)
         db.save_advice(row["id"], advice.to_dict(), path)
         result["advised"] += 1
         if progress:

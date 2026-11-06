@@ -7,11 +7,13 @@ import re
 import sqlite3
 
 _TOKEN_RE = re.compile(r"[\w./+-]+", re.UNICODE)
+MAX_TOKENS = 12
+MAX_TOKEN_LEN = 64
 
 
 def fts_match_query(raw: str) -> str | None:
-    tokens = [tok.replace('"', "") for tok in _TOKEN_RE.findall(raw.strip())]
-    tokens = [tok for tok in tokens if tok]
+    tokens = [tok.replace('"', "")[:MAX_TOKEN_LEN] for tok in _TOKEN_RE.findall(raw.strip())]
+    tokens = [tok for tok in tokens if tok][:MAX_TOKENS]
     if not tokens:
         return None
     return " AND ".join(f'"{tok}"' for tok in tokens)

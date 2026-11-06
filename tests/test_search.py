@@ -6,6 +6,7 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 from skelbiu_pc.api import create_app
+from skelbiu_pc.security import CSRF_HEADER
 from skelbiu_pc.seed import seed
 
 
@@ -13,7 +14,9 @@ from skelbiu_pc.seed import seed
 def _client(tmp_path: Path) -> Iterator[TestClient]:
     path = tmp_path / "ui.db"
     seed(path)
-    with TestClient(create_app(path)) as client:
+    with TestClient(
+        create_app(path), base_url="http://127.0.0.1", headers={CSRF_HEADER: "1"}
+    ) as client:
         yield client
 
 
@@ -65,6 +68,11 @@ def test_stats_and_analyze(tmp_path: Path):
     with _client(tmp_path) as client:
         stats = client.get("/api/stats").json()
         assert stats["total"] == 5
+        assert stats["on_sale"] == 4
+        assert stats["details_fresh"] == 4
+        assert stats["details_missing"] == 0
+        assert stats["details_stale"] == 0
+        assert stats["unanalyzed"] == 0
         assert stats["with_potential"] >= 1
         health = client.get("/api/health").json()
         assert health["ok"] is True

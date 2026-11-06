@@ -94,6 +94,7 @@ function isHomeState(state: QueryState): boolean {
     !state.min_profit &&
     !state.has_description &&
     state.kind === HOME_QUERY.kind &&
+    state.sort === HOME_QUERY.sort &&
     state.page === 1
   );
 }

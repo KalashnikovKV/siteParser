@@ -6,6 +6,10 @@ function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function message(err: unknown, fallback: string): string {
+  return err instanceof Error && err.message ? err.message : fallback;
+}
+
 export function useBackgroundJob() {
   const stats = ref<Stats | null>(null);
   const advisor = ref<AdvisorStatus | null>(null);
@@ -16,15 +20,25 @@ export function useBackgroundJob() {
   const detailsBusy = ref(false);
   const adviseBusy = ref(false);
   const error = ref("");
+  const notice = ref("");
   const dataTick = ref(0);
 
   async function refreshStats() {
     try {
-      stats.value = await catalog.stats();
-      advisor.value = await catalog.advisorStatus();
+      const [nextStats, nextAdvisor] = await Promise.all([
+        catalog.stats(),
+        catalog.advisorStatus(),
+      ]);
+      stats.value = nextStats;
+      advisor.value = nextAdvisor;
     } catch (err) {
-      error.value = err instanceof Error ? err.message : "Нет связи с API";
+      error.value = message(err, "Нет связи с API");
     }
+  }
+
+  function dismiss() {
+    error.value = "";
+    notice.value = "";
   }
 
   function watchStream(
@@ -34,7 +48,12 @@ export function useBackgroundJob() {
     return new Promise((resolve, reject) => {
       const source = new EventSource(`/api/jobs/${kind}/stream`);
       source.onmessage = (event) => {
-        const status = JSON.parse(event.data) as JobStatus;
+        let status: JobStatus;
+        try {
+          status = JSON.parse(event.data) as JobStatus;
+        } catch {
+          return;
+        }
         current.value = status;
         if (status.stats) stats.value = status.stats;
         if (!status.running) {
@@ -63,11 +82,11 @@ export function useBackgroundJob() {
     busy: { value: boolean },
   ) {
     busy.value = true;
-    error.value = "";
     try {
       try {
         await watchStream(kind, current);
-      } catch {
+      } catch (err) {
+        if (message(err, "") !== "stream") throw err;
         while (true) {
           const status = await poll();
           current.value = status;
@@ -80,7 +99,7 @@ export function useBackgroundJob() {
         }
       }
     } catch (err) {
-      error.value = err instanceof Error ? err.message : "Задача не удалась";
+      error.value = message(err, "Задача не удалась");
       await refreshStats();
     } finally {
       busy.value = false;
@@ -97,12 +116,12 @@ export function useBackgroundJob() {
   ) {
     if (busy.value) return;
     busy.value = true;
-    error.value = "";
+    dismiss();
     try {
       current.value = await start();
       if (!current.value.running && (current.value.total ?? 0) === 0) {
         if (kind === "details") {
-          error.value = "Нечего докачивать: нет пустых или устаревших описаний";
+          notice.value = "Нечего докачивать: нет пустых или устаревших описаний";
         }
         busy.value = false;
         await refreshStats();
@@ -112,7 +131,7 @@ export function useBackgroundJob() {
       await waitUntilIdle(kind, poll, current, busy);
       if (!current.value?.stats) await refreshStats();
     } catch (err) {
-      error.value = err instanceof Error ? err.message : "Задача не удалась";
+      error.value = message(err, "Задача не удалась");
       await refreshStats();
       busy.value = false;
     }
@@ -120,11 +139,19 @@ export function useBackgroundJob() {
 
   onMounted(async () => {
     await refreshStats();
-    const [analyze, details, advise] = await Promise.all([
-      catalog.analyzeStatus(),
-      catalog.detailsStatus(),
-      catalog.advisorStatus(),
-    ]);
+    let analyze: JobStatus;
+    let details: JobStatus;
+    let advise: AdvisorStatus;
+    try {
+      [analyze, details, advise] = await Promise.all([
+        catalog.analyzeStatus(),
+        catalog.detailsStatus(),
+        catalog.advisorStatus(),
+      ]);
+    } catch (err) {
+      error.value = message(err, "Нет связи с API");
+      return;
+    }
     analyzeJob.value = analyze;
     detailsJob.value = details;
     adviseJob.value = advise.job ?? null;
@@ -150,7 +177,9 @@ export function useBackgroundJob() {
     detailsBusy,
     adviseBusy,
     error,
+    notice,
     dataTick,
+    dismiss,
     refreshStats,
     analyze: () =>
       run("analyze", () => catalog.analyze(), catalog.analyzeStatus, analyzeJob, analyzeBusy),

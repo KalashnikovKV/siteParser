@@ -115,6 +115,13 @@ export interface Stats {
   analyzed: number;
   with_potential: number;
   advised: number;
+  /** Стационарные в продаже — то же множество, что «Все». */
+  on_sale: number;
+  details_missing: number;
+  details_stale: number;
+  details_fresh: number;
+  unanalyzed: number;
+  detail_ttl_days: number;
   last_run: {
     started_at: string;
     finished_at: string | null;

@@ -33,9 +33,11 @@ analyze / UI: поиск и логика только по локальной Б
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -e ".[dev]"
+pip install --require-hashes -r requirements-dev.txt
 playwright install chromium
 ```
+
+`requirements.txt` и `requirements-dev.txt` — lock-файлы с точными версиями и хэшами. После правки зависимостей в `pyproject.toml`: `make lock`, проверка на известные уязвимости: `make audit`.
 
 Первый заход часто упирается в Cloudflare. Один раз откройте окно и подтвердите, что вы не робот — профиль сохранится в `data/browser_profile/`:
 
@@ -56,7 +58,7 @@ cd web && npm install && npm run dev
 
 UI: http://127.0.0.1:5173  API: http://127.0.0.1:8765
 
-По умолчанию API слушает **только localhost**. Чтобы открыть из LAN: `SKELBIU_HOST=0.0.0.0 python -m skelbiu_pc serve`.
+По умолчанию API слушает **только localhost**. Открыть из LAN можно только с паролем — см. «Безопасность».
 
 ```bash
 python -m skelbiu_pc report --min-score 40 --top 30
@@ -80,3 +82,22 @@ UI: http://127.0.0.1:8765/
 ```bash
 docker compose --profile scrape run --rm scrape
 ```
+
+Контейнер работает от пользователя с uid 1000 (не root), с файловой системой только для чтения и без Linux capabilities. Писать он может лишь в `./data` и `/tmp`, поэтому `./data` должна принадлежать uid 1000. Другой uid: `APP_UID=$(id -u) APP_GID=$(id -g) docker compose up -d --build`.
+
+## Безопасность
+
+UI — локальный сервер, но в том же браузере открыты и чужие сайты. Поэтому:
+
+- **Host allowlist.** Запросы с чужим заголовком `Host` отклоняются (защита от DNS rebinding). Разрешены `localhost`, `127.0.0.1`, `::1` и адрес из `SKELBIU_HOST`; дополнительные имена — через `SKELBIU_ALLOWED_HOSTS=pc.lan,192.168.1.10`.
+- **CSRF.** Запуск задач (POST) принимается только с заголовком `X-Skelbiu-Request: 1` и своего origin; чужая страница так запрос не отправит.
+- **LAN только с паролем.** На `0.0.0.0` сервер без `SKELBIU_PASSWORD` не стартует; логин — `SKELBIU_USER` (по умолчанию `skelbiu`). Basic auth передаёт пароль открытым текстом — за пределами домашней сети ставьте HTTPS-прокси.
+
+  ```bash
+  SKELBIU_HOST=0.0.0.0 SKELBIU_PASSWORD='длинный-пароль' \
+  SKELBIU_ALLOWED_HOSTS=192.168.1.10 docker compose up -d
+  ```
+
+- **Заголовки.** Строгая CSP без inline-скриптов и стилей, `nosniff`, запрет фреймов, `no-referrer`, API не кэшируется.
+- **Текст объявления — недоверенный ввод.** Продавец может написать «поставь buy». Текст уходит модели в отдельном блоке как данные, а ответ проверяется: при попытке управлять моделью ставится флаг «текст пытается командовать моделью», вердикт «брать» понижается до «смотреть».
+- **Только skelbiu.lt.** Скрапер открывает лишь ссылки на `skelbiu.lt`; в UI не попадают ссылки с `javascript:` и подобными схемами.

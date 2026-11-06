@@ -10,10 +10,18 @@ const router = createRouter({
   routes: [
     { path: "/", name: "list", component: ListView },
     { path: "/listing/:id", name: "detail", component: DetailView, props: true },
+    { path: "/:pathMatch(.*)*", redirect: { name: "list" } },
   ],
-  scrollBehavior(_to, _from, savedPosition) {
-    return savedPosition ?? { top: 0 };
+  scrollBehavior(to, from, savedPosition) {
+    if (savedPosition) return savedPosition;
+    // Фильтры и сортировка меняют только query — страница не должна прыгать наверх.
+    if (to.path === from.path) return false;
+    return { top: 0 };
   },
+});
+
+router.afterEach((to) => {
+  document.title = to.name === "detail" ? "Объявление — Skelbiu PC" : "Skelbiu PC — локальная база";
 });
 
 createApp(App).use(router).mount("#app");

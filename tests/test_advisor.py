@@ -9,6 +9,7 @@ from skelbiu_pc.advisors.fake import FakeAdvisor
 from skelbiu_pc.advisors.ollama import _parse_advice
 from skelbiu_pc.api import create_app
 from skelbiu_pc.pipeline import advise_candidates
+from skelbiu_pc.security import CSRF_HEADER
 from skelbiu_pc.seed import seed
 
 
@@ -80,7 +81,9 @@ def _client(tmp_path: Path, monkeypatch) -> Iterator[TestClient]:
     monkeypatch.setenv("SKELBIU_ADVISOR", "fake")
     path = tmp_path / "ui.db"
     seed(path)
-    with TestClient(create_app(path)) as client:
+    with TestClient(
+        create_app(path), base_url="http://127.0.0.1", headers={CSRF_HEADER: "1"}
+    ) as client:
         yield client
 
 
