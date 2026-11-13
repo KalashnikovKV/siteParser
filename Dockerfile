@@ -7,7 +7,7 @@ COPY web/ ./
 RUN npm run build
 
 # Зависимости ставятся по lock-файлу с хэшами и до кода: правка кода не пересобирает этот слой.
-FROM python:3.12-slim-bookworm AS base
+FROM python:3.15-slim-bookworm AS base
 ARG APP_UID=1000
 ARG APP_GID=1000
 ENV PYTHONUNBUFFERED=1 \
